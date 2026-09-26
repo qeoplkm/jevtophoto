@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jevtophoto 题库交互台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: light dark;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --s1: #2a78d6; --s1-wash: rgba(42,120,214,.10); --s2: #eb6834; --de: #c3c2b7;
+    --good-text: #006300; --critical: #d03b3b; --warning: #b57a00;
+    --sans: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --s1: #3987e5; --s1-wash: rgba(57,135,229,.16); --s2: #d95926; --de: #52514e; --good-text: #0ca30c; --critical: #e66767; --warning: #fab219; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14.5px; line-height: 1.5; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 17px; font-weight: 600; white-space: nowrap; }
+  h2 { font-size: 18px; font-weight: 600; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+  button { font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--ink-2); }
+  button.primary { background: var(--s1); border-color: var(--s1); color: #fff; font-weight: 500; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.busy { position: relative; color: transparent; }
+  button.busy::after { content: ''; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border: 2px solid var(--axis); border-top-color: var(--s1); border-radius: 50%; animation: spin .8s linear infinite; }
+  button.primary.busy::after { border-color: rgba(255,255,255,.4); border-top-color: #fff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  textarea { font-family: var(--mono); font-size: 12px; line-height: 1.4; width: 100%; resize: vertical; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 8px; }
+  textarea.bad { border-color: var(--critical); }
+  label.cb { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13.5px; white-space: nowrap; }
+  .top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--grid); padding: 10px clamp(16px, 3vw, 28px); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .top .model { color: var(--muted); font-size: 12.5px; }
+  .top .spacer { flex: 1; }
+  .top .tally { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; display: flex; gap: 12px; }
+  .top .tally b { color: var(--ink); font-weight: 600; }
+  .ok { color: var(--good-text); } .bad { color: var(--critical); }
+  .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0 28px; padding: 20px clamp(16px, 3vw, 28px) 80px; max-width: 1500px; margin: 0 auto; }
+  nav { position: sticky; top: 62px; align-self: start; max-height: calc(100vh - 80px); overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+  nav a { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 6px; color: var(--ink-2); text-decoration: none; font-size: 13.5px; }
+  nav a:hover { background: var(--s1-wash); color: var(--ink); }
+  nav a .t { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+  .group { display: flex; flex-direction: column; gap: 12px; }
+  .group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .group-head .stat { color: var(--muted); font-size: 13px; }
+  .group-head button { margin-left: auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .card.hidden { display: none; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .card-head .id { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .card-head .note { color: var(--muted); font-size: 13px; }
+  .card-head .actions { margin-left: auto; display: flex; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--s1); }
+  .chip.edge { border-color: var(--s2); color: var(--s2); }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px 20px; }
+  .st .lbl { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .st .lbl .err { color: var(--critical); text-transform: none; letter-spacing: 0; }
+  .qs { display: flex; flex-direction: column; gap: 10px; }
+  .qbox { border: 1px solid var(--grid); border-radius: 6px; padding: 8px 10px; }
+  .qbox .qh { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: 13px; }
+  .qbox .qh .k { font-family: var(--mono); font-weight: 500; }
+  .qbox .qh .exp { color: var(--muted); font-size: 12px; }
+  .qbox .qh .exp b { color: var(--good-text); font-weight: 500; }
+  .qbox .summary { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .results { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .result { border-top: 1px dashed var(--grid); padding-top: 6px; display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 4px 12px; align-items: start; font-size: 12.5px; }
+  .result .v { font-weight: 600; }
+  .result .m { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .bars { display: grid; grid-template-columns: minmax(70px, 130px) 1fr 36px; gap: 2px 6px; align-items: center; font-size: 11.5px; }
+  .bars .l { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bars .l.exp { color: var(--ink); font-weight: 500; }
+  .bars .track { height: 8px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+  .bars .fill { height: 100%; background: var(--de); }
+  .bars .fill.exp { background: var(--s1); }
+  .bars .p { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .bars .p.top { color: var(--ink); font-weight: 600; }
+  .err { color: var(--critical); font-size: 13px; }
+  details.ins summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  details.ins p { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; white-space: pre-wrap; }
+  [hidden] { display: none !important; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav { position: static; max-height: none; flex-direction: row; flex-wrap: wrap; gap: 4px; } .body { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>jevtophoto 题库交互台</h1>
+    <span class="model" id="model">连接中…</span>
+    <span class="spacer"></span>
+    <div class="tally" id="tally"></div>
+    <label class="cb"><input type="checkbox" id="onlyEdge"> 只看边界</label>
+    <label class="cb"><input type="checkbox" id="onlyWrong"> 只看答错的</label>
+    <button id="runVisible">跑当前列表</button>
+    <button id="stop" hidden>停止</button>
+    <button id="clear">清空结果</button>
+  </div>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main id="main">
+      <details class="card ins" open>
+        <summary>问题的指令</summary>
+        <div id="ins"></div>
+      </details>
+      <div id="groups"></div>
+    </main>
+  </div>
+<script>
+(async () => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (tag, attrs = {}, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'html') e.innerHTML = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const DATA = await (await fetch('/api/items')).json();
+  const { cats: CATS, questions: Q, qkeys: QKEYS, records } = DATA;
+  const keysOf = (q) => (q.type === 'score' ? q.criteria.map((_, i) => String(i)) : Object.keys(q.criteria));
+  const labelOf = (q, k) => (q.type === 'score' ? q.criteria[Number(k)] : `${k} · ${q.criteria[k]}`);
+  const shortOf = (q, k) => (q.type === 'score' ? q.criteria[Number(k)] : k);
+
+  $('#ins').append(...QKEYS.map((k) => el('div', { style: 'margin-top:8px' }, el('div', { class: 'mono', style: 'font-weight:500' }, `${k}（${Q[k].type}）`), el('p', { text: Q[k].instructions }),
+    el('div', { class: 'bars', style: 'margin-top:4px' }, ...keysOf(Q[k]).flatMap((c) => [el('span', { class: 'l', text: shortOf(Q[k], c) }), el('span', { text: Q[k].type === 'score' ? '' : Q[k].criteria[c], style: 'grid-column: span 2; font-size:12px; color:var(--ink-2)' })])))));
+
+  let stopFlag = false;
+  async function ask(state, questions, expect) {
+    const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, questions, expect }) });
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error ?? `HTTP ${res.status}`);
+    return d;
+  }
+
+  // ---------- 计分 ----------
+  const tallies = {}; // rec -> [{qk, correct}]
+  function refreshTallies() {
+    let all = 0, ok = 0;
+    const perCat = {};
+    for (const r of records) for (const t of tallies[r.id] ?? []) { all++; if (t.correct) ok++; const c = (perCat[r.cat] ??= { n: 0, ok: 0 }); c.n++; if (t.correct) c.ok++; }
+    $('#tally').innerHTML = all ? `<span>已跑 <b>${all}</b> 题次</span><span class="ok">对 <b>${ok}</b></span><span class="bad">错 <b>${all - ok}</b></span><span>准确率 <b>${Math.round(100 * ok / all)}%</b></span>` : '<span>还没跑过</span>';
+    for (const a of document.querySelectorAll('nav a[data-cat]')) {
+      const c = perCat[a.dataset.cat], n = records.filter((r) => r.cat === a.dataset.cat).length;
+      a.querySelector('.t').innerHTML = c ? `${c.ok}<span class="bad">${c.n - c.ok ? ` / ✗${c.n - c.ok}` : ''}</span> · ${n} 条` : `${n} 条`;
+    }
+    applyFilter();
+  }
+
+  function renderResult(host, q, expect, d, edited) {
+    const box = el('div', { class: 'result' });
+    if (d.error) { box.append(el('div', { class: 'err', text: `调用失败：${d.error}` })); host.prepend(box); return; }
+    const v = el('div');
+    v.append(el('div', { class: `v ${d.correct ? 'ok' : 'bad'}`, text: `${d.correct ? '✓' : '✗'} ${shortOf(q, d.mode)}` }));
+    v.append(el('div', { class: 'm', text: `置信 ${d.confidence == null ? '–' : d.confidence.toFixed(2)} · 领先 ${d.lead.toFixed(2)}${edited ? ' · 改过的 state' : ''}` }));
+    const bars = el('div', { class: 'bars' });
+    for (const k of keysOf(q)) {
+      const p = d.dist[k] ?? 0, isExp = expect.includes(k);
+      bars.append(el('div', { class: `l ${isExp ? 'exp' : ''}`, text: shortOf(q, k), title: labelOf(q, k) }), el('div', { class: 'track' }, el('div', { class: `fill ${isExp ? 'exp' : ''}`, style: `width:${(p * 100).toFixed(1)}%` })), el('div', { class: `p ${k === d.mode ? 'top' : ''}`, text: p.toFixed(2) }));
+    }
+    box.append(v, bars);
+    host.prepend(box);
+    while (host.children.length > 6) host.lastChild.remove();
+  }
+
+  // ---------- 记录卡：一份 state，三个问题 ----------
+  const cards = new Map();
+  function recordCard(r) {
+    const card = el('div', { class: 'card', id: `rec-${r.id}` });
+    const head = el('div', { class: 'card-head' }, el('span', { class: 'id', text: r.id }), el('span', { class: 'chip' }, el('i', { class: 'dot' }), CATS[r.cat]), r.edge ? el('span', { class: 'chip edge', text: '边界' }) : null, r.note ? el('span', { class: 'note', text: r.note }) : null);
+    const runBtn = el('button', { class: 'primary', text: '测试' }), run3 = el('button', { text: '×3' });
+    head.append(el('div', { class: 'actions' }, runBtn, run3));
+    const pretty = JSON.stringify(r.state, null, 1);
+    const ta = el('textarea', { rows: '22' }); ta.value = pretty;
+    const errSpan = el('span', { class: 'err' });
+    const reset = el('button', { text: '还原', style: 'padding:1px 8px;font-size:12px' }); reset.hidden = true;
+    reset.addEventListener('click', () => { ta.value = pretty; ta.classList.remove('bad'); errSpan.textContent = ''; reset.hidden = true; });
+    ta.addEventListener('input', () => { reset.hidden = ta.value === pretty; });
+    const st = el('div', { class: 'st' }, el('div', { class: 'lbl' }, el('span', { text: 'state · 可以改了再测' }), errSpan, reset), ta);
+    const qboxes = {}, qruns = {};
+    const qs = el('div', { class: 'qs' });
+    for (const k of QKEYS) {
+      const exp = r.expect[k];
+      const sum = el('div', { class: 'summary' }); sum.hidden = true;
+      const results = el('div', { class: 'results' });
+      const box = el('div', { class: 'qbox' }, el('div', { class: 'qh' }, el('span', { class: 'k', text: k }), el('span', { class: 'exp', html: `标准答案 <b>${esc(exp.map((e) => shortOf(Q[k], e)).join(' | '))}</b>` })), sum, results);
+      qs.append(box); qboxes[k] = { box, sum, results }; qruns[k] = [];
+    }
+    card.append(head, el('div', { class: 'body' }, st, qs));
+    const refreshSummary = (k) => {
+      const runs = qruns[k], { sum } = qboxes[k];
+      if (!runs.length) { sum.hidden = true; return; }
+      const counts = {}; for (const x of runs) counts[x.mode] = (counts[x.mode] ?? 0) + 1;
+      const ok = runs.filter((x) => x.correct).length, conf = runs.reduce((s, x) => s + (x.confidence ?? 0), 0) / runs.length;
+      sum.innerHTML = `${runs.length} 次 · <span class="ok">对 ${ok}</span> · <span class="bad">错 ${runs.length - ok}</span> · 平均置信 ${conf.toFixed(2)} · ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([m, n]) => `<b>${esc(shortOf(Q[k], m))}</b> ${n}`).join(' / ')}`;
+      sum.hidden = false;
+    };
+    const runOnce = async () => {
+      let state;
+      try { state = JSON.parse(ta.value); ta.classList.remove('bad'); errSpan.textContent = ''; } catch { ta.classList.add('bad'); errSpan.textContent = 'JSON 不合法'; return; }
+      const edited = ta.value !== pretty;
+      try {
+        const d = await ask(state, Q, r.expect);
+        for (const k of QKEYS) {
+          const a = d.answers[k];
+          renderResult(qboxes[k].results, Q[k], r.expect[k], a, edited);
+          if (!edited) { qruns[k].push(a); (tallies[r.id] ??= []).push({ qk: k, correct: a.correct }); refreshSummary(k); }
+        }
+        if (!edited) { card.dataset.wrong = tallies[r.id].some((t) => !t.correct) ? '1' : ''; refreshTallies(); }
+      } catch (e) {
+        for (const k of QKEYS) renderResult(qboxes[k].results, Q[k], r.expect[k], { error: e.message });
+      }
+    };
+    const busy = async (btn, fn) => { btn.classList.add('busy'); btn.disabled = true; try { await fn(); } finally { btn.classList.remove('busy'); btn.disabled = false; } };
+    runBtn.addEventListener('click', () => busy(runBtn, runOnce));
+    run3.addEventListener('click', () => busy(run3, () => Promise.all([runOnce(), runOnce(), runOnce()])));
+    cards.set(r.id, { card, r, runOnce, runBtn, clear: () => { for (const k of QKEYS) { qruns[k].length = 0; qboxes[k].results.replaceChildren(); refreshSummary(k); } } });
+    return card;
+  }
+
+  const nav = $('#nav'), groups = $('#groups');
+  for (const [cat, name] of Object.entries(CATS)) {
+    const rs = records.filter((r) => r.cat === cat);
+    if (!rs.length) continue;
+    nav.append(el('a', { href: `#g-${cat}`, 'data-cat': cat }, el('span', { text: name }), el('span', { class: 't' })));
+    const g = el('section', { class: 'group', id: `g-${cat}`, 'data-cat': cat });
+    const runCat = el('button', { text: '跑这一类' });
+    runCat.addEventListener('click', () => runMany(rs.map((r) => r.id), runCat));
+    g.append(el('div', { class: 'group-head' }, el('h2', { text: name }), el('span', { class: 'stat', text: `${rs.length} 条，边界 ${rs.filter((r) => r.edge).length}` }), runCat));
+    for (const r of rs) g.append(recordCard(r));
+    groups.append(g);
+  }
+
+  async function runMany(ids, btn) {
+    stopFlag = false; $('#stop').hidden = false;
+    if (btn) { btn.classList.add('busy'); btn.disabled = true; }
+    let i = 0;
+    const worker = async () => {
+      while (i < ids.length && !stopFlag) {
+        const c = cards.get(ids[i++]);
+        if (!c || c.card.classList.contains('hidden')) continue;
+        c.runBtn.classList.add('busy');
+        try { await c.runOnce(); } finally { c.runBtn.classList.remove('busy'); }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (btn) { btn.classList.remove('busy'); btn.disabled = false; }
+    $('#stop').hidden = true;
+  }
+  $('#runVisible').addEventListener('click', () => runMany(records.map((r) => r.id).filter((id) => !cards.get(id).card.classList.contains('hidden')), $('#runVisible')));
+  $('#stop').addEventListener('click', () => { stopFlag = true; });
+  $('#clear').addEventListener('click', () => { for (const k of Object.keys(tallies)) delete tallies[k]; for (const c of cards.values()) { c.card.dataset.wrong = ''; c.clear(); } refreshTallies(); });
+  function applyFilter() {
+    const onlyWrong = $('#onlyWrong').checked, onlyEdge = $('#onlyEdge').checked;
+    for (const { card, r } of cards.values()) card.classList.toggle('hidden', (onlyWrong && card.dataset.wrong !== '1') || (onlyEdge && !r.edge));
+    for (const g of document.querySelectorAll('.group[data-cat]')) g.hidden = ![...g.querySelectorAll('.card')].some((c) => !c.classList.contains('hidden'));
+  }
+  $('#onlyWrong').addEventListener('change', applyFilter);
+  $('#onlyEdge').addEventListener('change', applyFilter);
+
+  refreshTallies();
+  try { const d = await ask({ ping: 1 }, { q: { type: 'choice', instructions: '这是连通性测试，随便选。', criteria: { a: 'a', b: 'b' } } }, {}); $('#model').textContent = `${d.model} · ${d.ms} ms`; } catch (e) { $('#model').textContent = `连不上 Jev：${e.message}`; }
+})();
+</script>
+</body>
+</html>

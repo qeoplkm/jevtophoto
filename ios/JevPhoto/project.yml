@@ -1,0 +1,32 @@
+# xcodegen generate  →  JevPhoto.xcodeproj（不提交工程文件，随时可再生成）
+name: JevPhoto
+options:
+  bundleIdPrefix: com.yaoshuai
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: 54H5XL9Q5A
+    CODE_SIGN_STYLE: Automatic   # 本机已有 team 54H5XL9Q5A 的通配开发 profile（含这台手机），自动签名直接能用
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+targets:
+  JevPhoto:
+    type: application
+    platform: iOS
+    sources:
+      - path: JevPhoto
+    info:
+      path: JevPhoto/Info.plist
+      properties:
+        CFBundleDisplayName: JevPhoto
+        NSPhotoLibraryUsageDescription: 只读相册、在手机上抽特征给 Jev 判断，不会删除或修改任何照片。
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yaoshuai.jevphoto
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true

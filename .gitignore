@@ -1,0 +1,11 @@
+.env
+node_modules/
+.DS_Store
+tools/extract/extract
+out/
+ios/JevPhoto/JevPhoto/Resources/Secrets.plist
+ios/JevPhoto/JevPhoto.xcodeproj/
+ios/JevPhoto/build/
+.claude/
+*.xcuserstate
+xcuserdata/

@@ -1,0 +1,18 @@
+{
+  "name": "jevtophoto",
+  "private": true,
+  "description": "Using Jev (TypeSafe, via OpenRouter) to find junk photos from structured features — synthetic bank, Mac extractor, iOS app",
+  "scripts": {
+    "bank": "node tools/capability/items.js",
+    "run": "node tools/capability/run.js",
+    "baseline": "node tools/capability/baseline.js",
+    "report": "node tools/capability/report.js",
+    "play": "node tools/capability/serve.js",
+    "rules": "node tools/capability/rules.js",
+    "ablate": "node tools/capability/ablate.js",
+    "extract:build": "swiftc -O -o tools/extract/extract tools/extract/extract.swift",
+    "extract": "tools/extract/extract --folder ~/Downloads --out out/downloads",
+    "ask": "node tools/extract/ask.js out/downloads",
+    "review": "node tools/extract/serve-out.js"
+  }
+}

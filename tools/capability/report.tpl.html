@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jevtophoto · A 方案结果</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --s1: #2a78d6; --s1-wash: rgba(42,120,214,.10); --s2: #eb6834; --de: #c3c2b7;
+    --good-text: #006300; --critical: #d03b3b; --warning: #b57a00;
+    --sans: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --s1: #3987e5; --s1-wash: rgba(57,135,229,.16); --s2: #d95926; --de: #52514e; --good-text: #0ca30c; --critical: #e66767; --warning: #fab219; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 28px) 80px; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-size: 20px; margin: 0; } h2 { font-size: 16px; margin: 0 0 10px; } p { margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  code { font-family: var(--mono); font-size: .92em; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .stat .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .stat .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .d { font-size: 12px; color: var(--ink-2); }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .04em; background: var(--surface); position: sticky; top: 0; z-index: 1; }
+  tr:last-child td { border-bottom: 0; }
+  .ok { color: var(--good-text); font-weight: 600; } .bad { color: var(--critical); font-weight: 600; } .warn { color: var(--warning); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .chip.edge { border-color: var(--s2); color: var(--s2); }
+  .id { font-family: var(--mono); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+  .note { color: var(--muted); font-size: 12px; }
+  .bars { display: grid; grid-template-columns: 96px 90px 34px; gap: 2px 6px; align-items: center; font-size: 11.5px; min-width: 230px; }
+  .bars .l { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bars .l.exp { color: var(--ink); font-weight: 500; }
+  .bars .track { height: 8px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+  .bars .fill { height: 100%; background: var(--de); }
+  .bars .fill.exp { background: var(--s1); }
+  .bars .p { text-align: right; color: var(--ink-2); }
+  .bars .p.top { color: var(--ink); font-weight: 600; }
+  .qhead { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; font-size: 12.5px; }
+  .qhead .m { color: var(--muted); }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--ink-2); }
+  select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 3px 8px; }
+  details { border-top: 1px dashed var(--grid); margin-top: 6px; padding-top: 4px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  pre { font-family: var(--mono); font-size: 11.5px; margin: 6px 0 0; white-space: pre-wrap; color: var(--ink-2); }
+  .tbl-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>jevtophoto · A 方案：合成特征题库 × Jev</h1>
+    <p class="sub" id="meta"></p>
+    <p class="sub">结论在 <code>RESULTS.md</code>；这页是逐条明细。每条记录两问：<code>junk</code>（该不该删，读众数）、<code>kind</code>；最右一列是规则 + Jev 的端到端栏位。条形图是三次平均分布，蓝色 = 标准答案里的档位。</p>
+  </header>
+
+  <section>
+    <h2>总览</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section>
+    <h2>置信度门：< τ 一律进「拿不准」（按次算）</h2>
+    <div class="tbl-wrap"><table id="gates"></table></div>
+  </section>
+
+  <section>
+    <h2>逐条明细</h2>
+    <div class="filters">
+      <label>类别 <select id="fCat"><option value="">全部</option></select></label>
+      <label><input type="checkbox" id="fEdge"> 只看边界</label>
+      <label><input type="checkbox" id="fWrong"> 只看答错过的</label>
+      <label><input type="checkbox" id="fFlip"> 只看翻过众数的</label>
+      <label><input type="checkbox" id="fDis"> 只看端到端和 utility 基线分歧的</label>
+      <span class="sub" id="count"></span>
+    </div>
+    <div class="tbl-wrap" style="margin-top:10px"><table id="rows"></table></div>
+  </section>
+</div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const labelOf = (qk, k) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria[Number(k)] : k; };
+  const descOf = (qk, k) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria[Number(k)] : `${k}：${q.criteria[k]}`; };
+  const keysOf = (qk) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria.map((_, i) => String(i)) : Object.keys(q.criteria); };
+  const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
+  const dz = { delete: '删', unsure: '说不准', keep: '留' };
+  const colZh = { delete: '建议删除', unsure: '拿不准', keep: '保留' };
+  const nEdge = D.recs.filter((r) => r.edge).length;
+
+  $('#meta').textContent = `${D.model} · ${D.ranAt.slice(0, 16).replace('T', ' ')} UTC · ${D.recs.length} 条记录（${nEdge} 条边界）× 3 问 × ${D.reps} 次`;
+
+  const acc = (qk) => D.accTable.find((a) => a.qk === qk);
+  const cards = [
+    ['junk 清晰案例', `${acc('junk').clear.ok}/${acc('junk').clear.n}`, '按次算，众数 ∈ 标准答案'],
+    ['junk 边界案例', `${acc('junk').edge.ok}/${acc('junk').edge.n}`, '标准答案已放宽成集合'],
+    ['kind', `${acc('kind').all.ok}/${acc('kind').all.n}`, '全部记录按次算'],
+        ['utility 基线 vs 端到端', `错 ${D.cmp.utility.wrong} : ${D.cmp.pipeline.wrong}`, `伤害 ${D.cmp.utility.harm} : ${D.cmp.pipeline.harm} · 漏网 ${D.cmp.utility.miss} : ${D.cmp.pipeline.miss}`],
+    ['端到端（规则 + Jev，门 ' + D.tau + '）', `删 ${D.pipe.del} · 拿不准 ${D.pipe.unsure} · 留 ${D.pipe.keep}`, `伤害 ${D.pipe.harm} · 漏网 ${D.pipe.miss} · 规则定 ${D.pipe.byRule} 条，Jev 定 ${D.pipe.byJev} 条`],
+  ];
+  $('#cards').innerHTML = cards.map(([k, v, d]) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join('');
+
+  $('#gates').innerHTML = `<tr><th>τ</th><th>建议删除</th><th>拿不准</th><th>保留</th><th>伤害</th><th>清晰垃圾被抓到</th><th>边界进了拿不准</th><th>清晰误进拿不准</th><th>保留栏里不该留的</th></tr>`
+    + D.gates.map((g) => `<tr><td>${g.tau}</td><td>${g.del}</td><td>${g.unsure}</td><td>${g.keep}</td><td class="${g.harm ? 'bad' : 'ok'}">${g.harm}</td><td>${g.junkCaught}/${g.junkTotal}</td><td>${g.edgeUnsure}/${g.edgeTotal}</td><td>${g.clearUnsure}/${g.clearTotal}</td><td>${g.keepWrong}</td></tr>`).join('');
+
+  const fCat = $('#fCat');
+  for (const [k, v] of Object.entries(D.cats)) if (D.recs.some((r) => r.cat === k)) fCat.append(new Option(v, k));
+
+  const bars = (qk, q) => keysOf(qk).map((k) => {
+    const p = q.avgDist[k] ?? 0, exp = q.expect.includes(k);
+    return `<div class="l ${exp ? 'exp' : ''}" title="${esc(descOf(qk, k))}">${esc(labelOf(qk, k))}</div><div class="track"><div class="fill ${exp ? 'exp' : ''}" style="width:${(p * 100).toFixed(1)}%"></div></div><div class="p ${k === q.maj ? 'top' : ''}">${p.toFixed(2)}</div>`;
+  }).join('');
+  const qcell = (qk, q) => `<div class="qhead"><span class="${q.majCorrect ? 'ok' : 'bad'}" title="${esc(descOf(qk, q.maj))}">${q.majCorrect ? '✓' : '✗'} ${esc(labelOf(qk, q.maj))}</span><span class="m">${q.correctRuns}/${q.runs.length} 对 · 置信 ${f2(q.conf)}${q.flips ? ` · <span class="warn">翻 ${q.flips}</span>` : ''}</span></div><div class="bars">${bars(qk, q)}</div>`;
+
+  const summ = (s) => { const a = s.asset, r = s.resource, t = s.imageProperties.TIFF, v = s.vision, d = s.derived;
+    const bits = [a.mediaType === 'video' ? `video ${a.duration}s` : null, ...a.mediaSubtypes, a.playbackStyle === 'imageAnimated' ? 'GIF' : null, r.contentType.replace(/^(public\.|com\.apple\.|com\.compuserve\.)/, ''), `${a.pixelWidth}×${a.pixelHeight}`,
+      t.Model ?? '无 EXIF', a.sourceType === 'typeCloudShared' ? '共享相簿' : null, `脸 ${v.faceCount}`, `字 ${v.recognizedTextCharCount}`, v.barcodeCount ? `码 ${v.barcodeCount}` : null, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'utility' : null,
+      `美 ${v.aesthetics.overallScore}`, `清 ${d.sharpness}`, `亮 ${d.meanLuminance}`, `${d.daysSinceCreation}d${d.daysSinceAdded !== d.daysSinceCreation ? `（进相册 ${d.daysSinceAdded}d）` : ''}`,
+      d.exactDuplicateCount ? `副本 ${d.exactDuplicateCount}` : null, d.nearDuplicateCount ? `近重复 ${d.nearDuplicateCount}` : null, d.isSharpestInBurst === false ? '非最清晰' : d.isSharpestInBurst === true ? '最清晰' : null,
+      a.burstIdentifier ? `连拍${a.burstSelectionTypes.length ? ' ' + a.burstSelectionTypes.join('+') : ''}` : null, a.isFavorite ? '★' : null, a.adjustmentsState !== 'none' ? a.adjustmentsState : null, a.extendedMetadata ? 'caption!' : null];
+    return bits.filter((b) => b != null).join(' · '); };
+
+  function render() {
+    const cat = fCat.value, onlyEdge = $('#fEdge').checked, onlyWrong = $('#fWrong').checked, onlyFlip = $('#fFlip').checked, onlyDis = $('#fDis').checked;
+    const rows = D.recs.filter((r) => (!cat || r.cat === cat) && (!onlyEdge || r.edge) && (!onlyWrong || D.qkeys.some((qk) => r.q[qk].correctRuns < r.q[qk].runs.length))
+      && (!onlyFlip || D.qkeys.some((qk) => r.q[qk].flips > 0)) && (!onlyDis || r.baseline.utility.decision !== r.jevDecision));
+    $('#count').textContent = `${rows.length} 条`;
+    $('#rows').innerHTML = `<tr><th>记录</th><th>junk · 该不该删</th><th>kind</th><th>keep</th><th>端到端 vs 基线</th></tr>` + rows.map((r) => {
+      const gold = r.gold.map((d) => dz[d]).join('|');
+      const dec = (d, name) => `<div><span class="note">${name}</span> <span class="${r.gold.includes(d) ? 'ok' : 'bad'}">${dz[d]}</span></div>`;
+      return `<tr><td style="max-width:280px"><div class="id">${esc(r.id)}</div><div style="margin:3px 0"><span class="chip">${esc(D.cats[r.cat])}</span> ${r.edge ? '<span class="chip edge">边界</span>' : ''}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}<div class="note" style="margin-top:4px">${esc(summ(r.state))}</div><details><summary>state</summary><pre>${esc(JSON.stringify(r.state, null, 1))}</pre></details></td>`
+        + D.qkeys.map((qk) => `<td>${qcell(qk, r.q[qk])}</td>`).join('')
+        + `<td><div><span class="note">标准</span> ${esc(gold)}</div><div><span class="note">端到端</span> <span class="${r.pipe.column === 'unsure' ? 'warn' : r.gold.includes(r.pipe.column) ? 'ok' : 'bad'}">${esc(colZh[r.pipe.column])}</span> <span class="note">${r.pipe.by === 'rule' ? '规则' : 'Jev'}：${esc(r.pipe.reason)}</span></div>${dec(r.jevDecision, 'Jev 单独')}${dec(r.baseline.utility.decision, 'utility 基线')}</td></tr>`;
+    }).join('');
+  }
+  for (const id of ['fCat', 'fEdge', 'fWrong', 'fFlip', 'fDis']) document.getElementById(id).addEventListener('change', render);
+  render();
+})();
+</script>
+</body>
+</html>
