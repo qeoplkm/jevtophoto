@@ -1,4 +1,4 @@
-// 题库的交互台：列出记录，点「测试」现场调 Jev，可以改 state 再测。改自 ~/jev/tools/capability/serve.js。
+// 题库的交互台：列出记录，点「测试」现场调 Jev，可以改 state 再测。改自作者早先的 Jev 能力探针（不在本仓库）。
 //   node tools/capability/serve.js      # http://localhost:8790
 // key 只留在这里，页面走 /api/ask 代理。/api/ask 一次可以带多个问题（同一条记录的三问）。
 const http = require('node:http');

@@ -18,7 +18,7 @@
 // 「不是相机拍的」只能从 imageProperties.TIFF.Model 为 null、mediaSubtypes、contentType、addedDate 和 creationDate 的差推。
 // 默认 fetch 不含 hidden 资源，也不会展开连拍（要 includeAllBurstAssets）——这两点 B 脚本要显式开。
 //
-// 题的形状沿用 ~/jev/tools/capability/items.js：{ id, cat, state, q: { type, instructions, criteria }, expect, note? }，
+// 题的形状沿用作者早先的 Jev 能力探针：{ id, cat, state, q: { type, instructions, criteria }, expect, note? }，
 // 每条记录展开成两题（.junk / .kind），多带 rec、qkey、edge。run.js 把同一条记录的两问合并成一次调用。
 // v3（2026-09-21）：keep_reason 砍掉（favorited / edited / has_people 是直读字段，only_copy 并进 junk），
 // kind 收窄成模型真能分的四类；收藏、用户编辑、userPick、精确重复、连拍非最清晰、hidden、共享相簿、太新的截图由 rules.js 硬处理。

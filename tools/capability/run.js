@@ -1,4 +1,4 @@
-// 把题库全部跑一遍。改自 ~/jev/tools/capability/run.js：call/read 原样，
+// 把题库全部跑一遍。改自作者早先的 Jev 能力探针（不在本仓库）：call/read 原样，
 // 区别是同一条记录的三问（junk / kind / keep）合并成一次调用（同一请求内的问题互不干扰，JEV-GUIDE 第四节），
 // 71 条记录 × 3 次 = 213 次调用。原始返回落在 .raw.json，整理后的结果在 results.json，报告由 report.js 生成。
 //
@@ -7,47 +7,53 @@
 //   ONLY=chat-old-unviewed node tools/capability/run.js
 //   EDGE=1 node tools/capability/run.js          # 只跑边界案例
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { CATS, QKEYS, PROFILES, records, items } = require('./items');
 
-// key 优先用项目自己的 .env，没有就用 ~/jev/.env（README：Key 在 ~/jev/.env 的 OPENROUTER_API_KEY）
+// Key 只从环境变量或项目根目录的 .env 读，而且等到真要调 Jev 时才读：
+// report.js / ablate.js 等离线脚本会 require 这个文件，没有 key 也必须能跑。
 const ROOT = path.join(__dirname, '..', '..');
-const env = {};
-const envFile = [path.join(ROOT, '.env'), path.join(os.homedir(), 'jev', '.env')].find((f) => fs.existsSync(f));
-if (!envFile) throw new Error('找不到 .env（项目根目录或 ~/jev/.env）');
-for (const l of fs.readFileSync(envFile, 'utf8').split('\n')) {
-  if (l.trim().startsWith('#')) continue;
-  const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
-  if (m && m[2]) env[m[1]] = m[2];
+let apiKey = null;
+function getApiKey() {
+  if (apiKey) return apiKey;
+  apiKey = process.env.OPENROUTER_API_KEY || null;
+  const envFile = path.join(ROOT, '.env');
+  if (!apiKey && fs.existsSync(envFile)) {
+    for (const l of fs.readFileSync(envFile, 'utf8').split('\n')) {
+      const m = l.match(/^\s*OPENROUTER_API_KEY\s*=\s*(.*?)\s*$/);
+      if (m && m[1]) apiKey = m[1];
+    }
+  }
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not found. Copy .env.example to .env and add your OpenRouter key, or set OPENROUTER_API_KEY in the environment.');
+  return apiKey;
 }
-if (!env.OPENROUTER_API_KEY) throw new Error(`${envFile} 里没有 OPENROUTER_API_KEY`);
 
 const REPS = Number(process.env.REPS ?? 3);
 const CONC = Number(process.env.CONC ?? 4);
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const EDGE = process.env.EDGE === '1';
 const PROFILE = process.env.PROFILE ?? null;   // PROFILE=aggressive 换一套 junk 判断标准（items.js 的 PROFILES）
-if (PROFILE && !PROFILES[PROFILE]) throw new Error(`没有这个 profile：${PROFILE}`);
+if (PROFILE && !PROFILES[PROFILE]) throw new Error(`Unknown PROFILE "${PROFILE}". Available: ${Object.keys(PROFILES).join(', ')}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 一次请求带多个问题；返回 { model, answers: {key: answer}, ms }
 async function callMany(state, questions) {
   const body = JSON.stringify({ model: '~typesafe/jev-latest', state, questions });
+  const key = getApiKey(); // 配置问题不重试，直接报
   let lastErr;
   for (let attempt = 0; attempt < 5; attempt++) {
     const t0 = Date.now();
     try {
       const res = await fetch('https://openrouter.ai/api/alpha/decisions', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body,
       });
       const text = await res.text();
       if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 200)}`);
       const d = JSON.parse(text);
-      for (const k of Object.keys(questions)) if (!d.answers || !d.answers[k]) throw new Error(`返回里没有 answers.${k}: ${text.slice(0, 200)}`);
+      for (const k of Object.keys(questions)) if (!d.answers || !d.answers[k]) throw new Error(`response has no answers.${k}: ${text.slice(0, 200)}`);
       return { model: d.model, answers: d.answers, ms: Date.now() - t0 };
     } catch (e) {
       lastErr = e;
@@ -90,13 +96,14 @@ function read(item, answer) {
 async function runBank(opts) {
   const { todo, reps = REPS, conc = CONC, tag = '', transformState = (s) => s, transformQ = (q) => q, quiet = false } = opts;
   const log = quiet ? () => {} : console.log;
+  getApiKey(); // 先确认有 key：否则每条都报错，还会用错误行覆盖 results*.json
   const itemsOf = Object.fromEntries(todo.map((r) => [r.id, items.filter((it) => it.rec === r.id).map((it) => ({ ...it, state: transformState(it.state, it), q: transformQ(it.q) }))]));
   const jobs = [];
   for (const r of todo) for (let rep = 0; rep < reps; rep++) jobs.push({ r, rep });
   // 交错：同一条记录的各次重复不相邻，避免短时状态相关
   jobs.sort((a, b) => a.rep - b.rep || 0);
 
-  log(`${todo.length} 条记录 × ${QKEYS.length} 问 × ${reps} 次 = ${jobs.length} 次调用（每次带 ${QKEYS.length} 问），并发 ${conc}`);
+  log(`${todo.length} records × ${reps} runs = ${jobs.length} calls (${QKEYS.length} questions each), concurrency ${conc}`);
   const raw = [];
   const runs = {};
   let done = 0;
@@ -152,18 +159,18 @@ async function main() {
     }
     for (const [cat, c] of Object.entries(byCat)) {
       const mc = c.conf.length ? (c.conf.reduce((s, v) => s + v, 0) / c.conf.length).toFixed(2) : '-';
-      console.log(`  ${CATS[cat].padEnd(12)} ${String(c.correct).padStart(3)}/${String(c.n).padEnd(3)} ${(100 * c.correct / c.n).toFixed(0).padStart(3)}%  平均置信 ${mc}`);
+      console.log(`  ${cat.padEnd(16)} ${String(c.correct).padStart(3)}/${String(c.n).padEnd(3)} ${(100 * c.correct / c.n).toFixed(0).padStart(3)}%  mean confidence ${mc}`);
     }
   }
   const wrong = results.filter((r) => r.runs.some((x) => !x.error && !x.correct));
   if (wrong.length) {
-    console.log('\n答错过的题：');
+    console.log('\nItems answered wrong at least once:');
     for (const r of wrong) {
       const modes = r.runs.map((x) => (x.error ? '!' : x.mode)).join(' ');
-      console.log(`  ${(r.edge ? '⚑ ' : '  ') + r.id.padEnd(34)} 期望 ${r.expect.join('|').padEnd(22)} 得到 ${modes}`);
+      console.log(`  ${(r.edge ? '⚑ ' : '  ') + r.id.padEnd(34)} expected ${r.expect.join('|').padEnd(22)} got ${modes}`);
     }
   }
-  console.log(`\n写入 tools/capability/results${tag}.json`);
+  console.log(`\nWrote tools/capability/results${tag}.json`);
 }
 
 module.exports = { call, callMany, read, runBank };

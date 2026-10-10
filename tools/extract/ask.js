@@ -11,7 +11,7 @@ const { applyRules, decide, DEFAULT_TAU } = require('../capability/rules');
 
 const outDir = process.argv[2];
 const SEND = process.argv.includes('--send');
-if (!outDir) { console.error('用法：node tools/extract/ask.js <outDir> [--send]'); process.exit(2); }
+if (!outDir) { console.error('Usage: node tools/extract/ask.js <outDir> [--send]   (outDir must contain features.json from tools/extract/extract)'); process.exit(2); }
 const TAU = Number(process.env.TAU ?? DEFAULT_TAU);
 const REPS = Number(process.env.REPS ?? 1);
 const F = JSON.parse(fs.readFileSync(path.join(outDir, 'features.json'), 'utf8'));
@@ -21,17 +21,17 @@ const rows = F.records.map((r) => ({ ...r, rule: applyRules(r.state) }));
 const toAsk = rows.filter((r) => !r.rule.verdict);
 const summ = (s) => {
   const a = s.asset, t = s.imageProperties.TIFF, v = s.vision, d = s.derived;
-  return [a.mediaType === 'video' ? `video ${a.duration}s` : null, ...a.mediaSubtypes, `${a.pixelWidth}×${a.pixelHeight}`, t.Model ?? '无 EXIF', `脸 ${v.faceCount}`, `字 ${v.recognizedTextCharCount}`,
-    v.barcodeCount ? `码 ${v.barcodeCount}` : null, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'utility' : null, `美 ${v.aesthetics.overallScore ?? '–'}`, `清 ${d.sharpness ?? '–'}`, `亮 ${d.meanLuminance ?? '–'}`,
-    `${d.daysSinceCreation}d`, d.exactDuplicateCount ? `副本 ${d.exactDuplicateCount}` : null, d.nearDuplicateCount ? `近重复 ${d.nearDuplicateCount}` : null, d.isSharpestInBurst === false ? '非最清晰' : null].filter((x) => x != null).join(' · ');
+  return [a.mediaType === 'video' ? `video ${a.duration}s` : null, ...a.mediaSubtypes, `${a.pixelWidth}×${a.pixelHeight}`, t.Model ?? 'no EXIF', `faces ${v.faceCount}`, `chars ${v.recognizedTextCharCount}`,
+    v.barcodeCount ? `barcodes ${v.barcodeCount}` : null, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'utility' : null, `aesth ${v.aesthetics.overallScore ?? '–'}`, `sharp ${d.sharpness ?? '–'}`, `lum ${d.meanLuminance ?? '–'}`,
+    `${d.daysSinceCreation}d`, d.exactDuplicateCount ? `copies ${d.exactDuplicateCount}` : null, d.nearDuplicateCount ? `near-dups ${d.nearDuplicateCount}` : null, d.isSharpestInBurst === false ? 'not sharpest in burst' : null].filter((x) => x != null).join(' · ');
 };
-console.log(`${F.source}（${F.mode}）：${rows.length} 条，规则定了 ${rows.length - toAsk.length} 条，要问 Jev ${toAsk.length} 条 × ${QKEYS.length} 问 × ${REPS} 次，门 ${TAU}\n`);
-for (const r of rows) console.log(`  ${r.id.slice(0, 34).padEnd(34)} ${r.rule.verdict ? `规则 ${r.rule.verdict.padEnd(6)} ${r.rule.reason}` : '→ Jev'.padEnd(20)}  ${summ(r.state)}`);
+console.log(`${F.source} (${F.mode}): ${rows.length} items, ${rows.length - toAsk.length} decided by rules, ${toAsk.length} for Jev × ${QKEYS.length} questions × ${REPS} runs, gate ${TAU}\n`);
+for (const r of rows) console.log(`  ${r.id.slice(0, 34).padEnd(34)} ${r.rule.verdict ? `rule ${r.rule.verdict.padEnd(6)} ${r.rule.reason}` : '→ Jev'.padEnd(20)}  ${summ(r.state)}`);
 
 // 干跑：把会发出去的东西原样写下来给人看（state + 两个问题的 instructions/criteria 都在里面）
 const toSend = { model: '~typesafe/jev-latest', questions: QUESTIONS, records: toAsk.map((r) => ({ id: r.id, file: r.file, state: r.state })) };
 fs.writeFileSync(path.join(outDir, 'to-send.json'), JSON.stringify(toSend, null, 1));
-console.log(`\n发给 Jev 的内容原样写在 ${path.join(outDir, 'to-send.json')}（没有像素、没有文件名、没有 OCR 原文；文件名只在本地对照用）`);
+console.log(`\nThe exact payload for Jev is in ${path.join(outDir, 'to-send.json')} (no pixels, no file names, no OCR text; file names stay local for cross-reference).`);
 
 // ---------- 2. 问 Jev ----------
 async function main() {
@@ -52,10 +52,10 @@ async function main() {
         if (done % 10 === 0 || done === jobs.length) process.stdout.write(`  ${done}/${jobs.length}\n`);
       }
     };
-    console.log(`\n问 Jev：${jobs.length} 次调用`);
+    console.log(`\nAsking Jev: ${jobs.length} calls`);
     await Promise.all(Array.from({ length: 4 }, worker));
   } else if (!SEND) {
-    console.log('\n干跑，没有发。确认无误后加 --send。');
+    console.log('\nDry run — nothing was sent. Review to-send.json, then rerun with --send.');
   }
 
   // ---------- 3. 决策 ----------
@@ -69,8 +69,8 @@ async function main() {
     return { id: r.id, file: r.file, thumbnail: r.thumbnail, dates: r.dates, state: r.state, rule: r.rule, junk, kind, decision: d, summary: summ(r.state) };
   });
   const cols = { delete: decisions.filter((x) => x.decision.column === 'delete'), unsure: decisions.filter((x) => x.decision.column === 'unsure'), keep: decisions.filter((x) => x.decision.column === 'keep') };
-  console.log(`\n建议删除 ${cols.delete.length} · 拿不准 ${cols.unsure.length} · 保留 ${cols.keep.length}`);
-  for (const [col, list] of Object.entries(cols)) for (const x of list) console.log(`  ${({ delete: '删', unsure: '？', keep: '留' })[col]} ${x.id.slice(0, 34).padEnd(34)} ${x.decision.by === 'rule' ? '规则' : x.decision.by === 'jev' ? 'Jev ' : '    '} ${x.decision.reason}${x.kind ? `  · kind ${x.kind.mode} ${x.kind.confidence.toFixed(2)}` : ''}`);
+  console.log(`\nSuggest delete ${cols.delete.length} · Not sure ${cols.unsure.length} · Keep ${cols.keep.length}`);
+  for (const [col, list] of Object.entries(cols)) for (const x of list) console.log(`  ${({ delete: 'DEL', unsure: '???', keep: 'KEEP' })[col].padEnd(4)} ${x.id.slice(0, 34).padEnd(34)} ${x.decision.by === 'rule' ? 'rule' : x.decision.by === 'jev' ? 'Jev ' : '    '} ${x.decision.reason}${x.kind ? `  · kind ${x.kind.mode} ${x.kind.confidence.toFixed(2)}` : ''}`);
   const out = { generatedAt: new Date().toISOString(), source: F.source, mode: F.mode, sent: SEND, tau: TAU, reps: REPS, model: SEND ? '~typesafe/jev-latest' : null, decisions };
   fs.writeFileSync(path.join(outDir, 'decisions.json'), JSON.stringify(out, null, 1));
 
@@ -114,6 +114,6 @@ ${['delete', 'unsure', 'keep'].map((c) => `<div class="col ${c}"><h2>${({ delete
 <p class="foot">这页什么都不删。像素、文件名、OCR 原文都没有发出去；发出去的 JSON 在 to-send.json。规则：隐藏 / 共享相簿 / 14 天内的截图不进候选；收藏、用户编辑、连拍里用户选中直接保留；一模一样的副本、连拍里不是最清晰的直接建议删除；其余由 Jev 的「该不该删」众数决定，「说不准」或置信度 &lt; ${TAU} 进「拿不准」。</p>
 </div></body></html>`;
   fs.writeFileSync(path.join(outDir, 'review.html'), html);
-  console.log(`\n写入 ${path.join(outDir, 'decisions.json')} 和 ${path.join(outDir, 'review.html')}`);
+  console.log(`\nWrote ${path.join(outDir, 'decisions.json')} and ${path.join(outDir, 'review.html')}`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

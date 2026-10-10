@@ -23,7 +23,10 @@ function localDecide(state, recentDays = 3) {
 const colZh = { delete: '删', unsure: '？', keep: '留' };
 const feat = (s) => { const v = s.vision, d = s.derived, t = s.imageProperties.TIFF, a = s.asset; return [a.mediaType === 'video' ? 'video' : null, ...a.mediaSubtypes, t.Model ? 'cam' : 'noEXIF', `脸${v.faceCount}`, `字${v.recognizedTextCharCount}`, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'util' : null, `美${v.aesthetics.overallScore}`, `清${d.sharpness}`, `亮${d.meanLuminance}`, `${d.daysSinceCreation}d`].filter(Boolean).join(' '); };
 
-if (process.argv[2] === '--bank') {
+if (!process.argv[2]) {
+  console.error('Usage:\n  node tools/extract/local-baseline.js --bank              # compare against the synthetic bank\'s answer key\n  node tools/extract/local-baseline.js <decisions.json>    # compare with Jev on real photos (from ask.js or the iOS app export)');
+  process.exit(2);
+} else if (process.argv[2] === '--bank') {
   const { records } = require('../capability/items');
   const { goldDecisions } = require('../capability/baseline');
   let harm = [], miss = [], wrong = [], unsure = 0;
