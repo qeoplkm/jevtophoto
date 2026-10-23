@@ -1,10 +1,10 @@
-// 手机直接调 Jev（OpenRouter）。body 用有序 JSON 手工拼，state 的字段顺序和题库一致。
+// The phone calls Jev (OpenRouter) directly. The body is hand-built ordered JSON so the state's key order matches the bank.
 import Foundation
 
 enum JevError: Error, LocalizedError {
     case noKey, http(Int, String), badResponse(String)
     var errorDescription: String? {
-        switch self { case .noKey: return "没有 OpenRouter API key"; case .http(let c, let t): return "HTTP \(c)：\(t.prefix(200))"; case .badResponse(let t): return "返回格式不对：\(t.prefix(200))" }
+        switch self { case .noKey: return "No OpenRouter API key"; case .http(let c, let t): return "HTTP \(c): \(t.prefix(200))"; case .badResponse(let t): return "Unexpected response: \(t.prefix(200))" }
     }
 }
 
@@ -33,7 +33,7 @@ struct JevClient {
                 if case .obj(let qs) = questions {
                     for (key, q) in qs {
                         guard let a = answers[key] as? [String: Any], let probs = a["probabilities"] as? [String: Any] else { throw JevError.badResponse(text) }
-                        // 按 criteria 的顺序取概率：score 题是 "0".."n"，choice 题是 key
+                        // probabilities in criteria order: "0".."n" for score questions, keys for choice questions
                         var ordered: [(String, Double)] = []
                         if case .arr(let levels)? = q["criteria"] { for i in levels.indices { ordered.append((String(i), (probs[String(i)] as? NSNumber)?.doubleValue ?? 0)) } }
                         else if case .obj(let kv)? = q["criteria"] { for (k, _) in kv { ordered.append((k, (probs[k] as? NSNumber)?.doubleValue ?? 0)) } }

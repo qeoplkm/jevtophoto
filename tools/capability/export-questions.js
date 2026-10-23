@@ -1,5 +1,6 @@
-// 把 items.js 里的问题原样导出成 Swift（iOS app 用），保证手机上发的指令和题库一字不差、键序一致。
-//   node tools/capability/export-questions.js   # 写 ios/JevPhoto/JevPhoto/Model/Questions.swift
+// Export the questions in items.js verbatim to Swift for the iOS app, so the phone sends exactly the same
+// instructions as the bank, with the same key order.
+//   node tools/capability/export-questions.js   # writes ios/JevPhoto/JevPhoto/Model/Questions.swift
 const fs = require('node:fs');
 const path = require('node:path');
 const { QUESTIONS, QKEYS, PROFILES } = require('./items');
@@ -13,8 +14,8 @@ const toSwift = (v) => {
   if (typeof v === 'boolean') return `.b(${v})`;
   return '.null';
 };
-const out = `// 由 tools/capability/export-questions.js 从 items.js 生成，不要手改。
-// 指令、criteria 和键序与 A 方案题库一字不差（序列化顺序是 prompt 的一部分）。
+const out = `// Generated from items.js by tools/capability/export-questions.js. Do not edit by hand.
+// Instructions, criteria and key order match the phase A bank exactly (serialization order is part of the prompt).
 import Foundation
 
 let QUESTION_KEYS: [String] = [${QKEYS.map(lit).join(', ')}]
@@ -29,4 +30,4 @@ let KIND_LABELS: [String: String] = [${Object.entries(QUESTIONS.kind.criteria).m
 const dest = path.join(__dirname, '..', '..', 'ios', 'JevPhoto', 'JevPhoto', 'Model', 'Questions.swift');
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, out);
-console.log(`写入 ${path.relative(process.cwd(), dest)}（${QKEYS.length} 问）`);
+console.log(`Wrote ${path.relative(process.cwd(), dest)} (${QKEYS.length} questions)`);

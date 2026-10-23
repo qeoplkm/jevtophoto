@@ -1,5 +1,5 @@
-// 在手机上抽特征：PhotoKit（字段原样）+ ImageIO（EXIF）+ Vision（人脸 / 文字 / 条码 / 美学分 / 特征印）+ 代码算的。
-// 像素不出手机；OCR 原文只留字数 / 有没有金额 / 单据类型。和 tools/extract/extract.swift 的算法一致。
+// Feature extraction on the phone: PhotoKit (fields as-is) + ImageIO (EXIF) + Vision (faces / text / barcodes / aesthetics / feature prints) + computed values.
+// Pixels never leave the phone; OCR text is reduced to character count / has an amount / document type. Same algorithms as tools/extract/extract.swift.
 import Foundation
 import Photos
 import Vision
@@ -9,9 +9,9 @@ import CryptoKit
 import UIKit
 
 let ANALYSIS_MAX_PIXEL: CGFloat = 1024
-let NEAR_DUP_DISTANCE: Float = 0.4   // VNFeaturePrint 距离阈值，拍的；真图上要看分布再定
+let NEAR_DUP_DISTANCE: Float = 0.4   // VNFeaturePrint distance threshold, a guess; check the distribution on real photos
 
-// 一次性 continuation（PHImageManager 的回调可能来两次）
+// One-shot continuation (PHImageManager's callback can fire twice)
 final class Once<T> {
     private var cont: CheckedContinuation<T, Never>?
     init(_ c: CheckedContinuation<T, Never>) { cont = c }
@@ -21,7 +21,7 @@ final class Once<T> {
 enum Extractor {
     static let exifDate: DateFormatter = { let f = DateFormatter(); f.dateFormat = "yyyy:MM:dd HH:mm:ss"; f.timeZone = TimeZone.current; return f }()
 
-    // ---------- PhotoKit 字段 ----------
+    // ---------- PhotoKit fields ----------
     static func subtypeNames(_ st: PHAssetMediaSubtype) -> [String] {
         var out: [String] = []
         if st.contains(.photoPanorama) { out.append("photoPanorama") }
@@ -62,7 +62,7 @@ enum Extractor {
         if a.burstSelectionTypes.contains(.autoPick) { sel.append("autoPick") }
         if a.burstSelectionTypes.contains(.userPick) { sel.append("userPick") }
         s.burstSelectionTypes = sel
-        // resource：原始那份
+        // resource: the original
         let res = PHAssetResource.assetResources(for: a)
         if let r = res.first(where: { $0.type == .photo || $0.type == .video }) ?? res.first {
             if #available(iOS 26.0, *) { s.contentType = r.contentType.identifier } else { s.contentType = r.uniformTypeIdentifier }
@@ -71,7 +71,7 @@ enum Extractor {
         return s
     }
 
-    // ---------- PHImageManager 的 async 包装 ----------
+    // ---------- async wrappers for PHImageManager ----------
     static func requestImage(_ a: PHAsset, maxPixel: CGFloat, allowNetwork: Bool) async -> UIImage? {
         await withCheckedContinuation { (c: CheckedContinuation<UIImage?, Never>) in
             let once = Once(c)
@@ -99,7 +99,7 @@ enum Extractor {
         }
     }
 
-    // ---------- ImageIO：EXIF / GPS ----------
+    // ---------- ImageIO: EXIF / GPS ----------
     static func readImageProperties(_ data: Data, into s: inout FeatureState) -> Date? {
         guard let src = CGImageSourceCreateWithData(data as CFData, nil), let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [String: Any] else { return nil }
         let tiff = props[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
@@ -115,7 +115,7 @@ enum Extractor {
         return nil
     }
 
-    // ---------- 灰度统计：亮度 + Laplacian 方差 ----------
+    // ---------- grayscale stats: luminance + Laplacian variance ----------
     static func grayStats(_ img: CGImage) -> (mean: Double, lapVar: Double)? {
         let scale = min(1.0, 512.0 / Double(max(img.width, img.height)))
         let w = max(3, Int(Double(img.width) * scale)), h = max(3, Int(Double(img.height) * scale))
@@ -136,7 +136,7 @@ enum Extractor {
     }
     static func sharpnessScore(_ v: Double) -> Double { min(1, max(0, (log10(v + 1) - 1) / 2.5)) }
 
-    // ---------- OCR 派生 ----------
+    // ---------- OCR-derived features (the Chinese keywords below are deliberate data, so Chinese-language documents are recognised too) ----------
     static func ocrDerived(_ text: String) -> (chars: Int, hasAmount: Bool, docType: String) {
         let compact = text.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
         let up = text.uppercased()
@@ -161,9 +161,9 @@ enum Extractor {
         let cls = VNClassifyImageRequest()
         let aesth = VNCalculateImageAestheticsScoresRequest()
         let handler = VNImageRequestHandler(cgImage: img, options: [:])
-        // 分开跑：模拟器上美学分可能不支持，别把别的也拖垮
-        do { try handler.perform([face, text, barcode, fp, cls]) } catch { notes.append("Vision 失败：\(error.localizedDescription)") }
-        do { try handler.perform([aesth]) } catch { notes.append("美学分不可用：\(error.localizedDescription)") }
+        // run separately: aesthetics may be unsupported on the simulator; don't let it take the others down
+        do { try handler.perform([face, text, barcode, fp, cls]) } catch { notes.append("Vision failed: \(error.localizedDescription)") }
+        do { try handler.perform([aesth]) } catch { notes.append("aesthetics unavailable: \(error.localizedDescription)") }
         s.faceCount = face.results?.count ?? 0
         let str = (text.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
         let o = ocrDerived(str); s.textCharCount = o.chars; s.ocrHasAmount = o.hasAmount; s.ocrDocType = o.docType
@@ -173,7 +173,7 @@ enum Extractor {
         return fp.results?.first
     }
 
-    // ---------- 一张 ----------
+    // ---------- one asset ----------
     static func extract(_ a: PHAsset, allowICloud: Bool) async -> PhotoRecord {
         var s = baseState(a)
         var rec = PhotoRecord(id: a.localIdentifier, asset: a, state: s, creationDate: a.creationDate, addedDate: nil)
@@ -191,16 +191,16 @@ enum Extractor {
                 }
                 let gen = AVAssetImageGenerator(asset: av); gen.appliesPreferredTrackTransform = true; gen.maximumSize = CGSize(width: ANALYSIS_MAX_PIXEL, height: ANALYSIS_MAX_PIXEL)
                 let t = CMTime(seconds: min(0.5, max(0, a.duration / 2)), preferredTimescale: 600)
-                if let r = try? await gen.image(at: t) { cg = r.image } else { notes.append("视频取不到封面帧") }
-            } else { notes.append("视频在 iCloud，没读") }
+                if let r = try? await gen.image(at: t) { cg = r.image } else { notes.append("could not get the video poster frame") }
+            } else { notes.append("video is in iCloud, not read") }
         } else {
             let (data, inCloud) = await requestData(a, allowNetwork: allowICloud)
             if let data = data {
                 rec.sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
                 if s.dataSize == nil { s.dataSize = data.count }
                 if let d = readImageProperties(data, into: &s), rec.creationDate == nil { rec.creationDate = d }
-            } else { notes.append(inCloud ? "原图在 iCloud，EXIF 和精确重复没算" : "读不到原图数据") }
-            if let ui = await requestImage(a, maxPixel: ANALYSIS_MAX_PIXEL, allowNetwork: true) { cg = ui.cgImage } else { notes.append("拿不到分析用的图") }
+            } else { notes.append(inCloud ? "original is in iCloud; EXIF and exact duplicates not computed" : "could not read the original data") }
+            if let ui = await requestImage(a, maxPixel: ANALYSIS_MAX_PIXEL, allowNetwork: true) { cg = ui.cgImage } else { notes.append("could not get an image to analyse") }
         }
         if let img = cg {
             if let g = grayStats(img) { s.meanLuminance = g.mean; s.sharpness = sharpnessScore(g.lapVar) }
@@ -213,14 +213,14 @@ enum Extractor {
         return rec
     }
 
-    // ---------- 整批：精确重复、近重复、连拍里最清晰 ----------
+    // ---------- whole batch: exact duplicates, near duplicates, sharpest in burst ----------
     static func finalize(_ recs: inout [PhotoRecord]) {
         var shaCount: [String: Int] = [:]
         for r in recs { if let h = r.sha { shaCount[h, default: 0] += 1 } }
         for i in recs.indices { if let h = recs[i].sha { recs[i].state.exactDuplicateCount = max(0, (shaCount[h] ?? 1) - 1) } }
         var parent = Array(recs.indices)
         func find(_ x: Int) -> Int { var x = x; while parent[x] != x { parent[x] = parent[parent[x]]; x = parent[x] }; return x }
-        // 连拍按 burstIdentifier 分组；其余按特征印距离
+        // bursts are grouped by burstIdentifier; everything else by feature-print distance
         var byBurst: [String: [Int]] = [:]
         for i in recs.indices { if let b = recs[i].state.burstIdentifier { byBurst[b, default: []].append(i) } }
         for (_, m) in byBurst { for j in m.dropFirst() { let a = find(m[0]), b = find(j); if a != b { parent[a] = b } } }

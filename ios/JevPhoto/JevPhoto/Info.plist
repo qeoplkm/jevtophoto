@@ -23,7 +23,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>只读相册、在手机上抽特征给 Jev 判断，不会删除或修改任何照片。</string>
+	<string>Reads your photo library to extract features on this phone for Jev to judge. It never deletes or changes any photo.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

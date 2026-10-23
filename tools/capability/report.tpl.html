@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jevtophoto · A 方案结果</title>
+<title>jevtophoto · phase A results</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -11,7 +11,7 @@
     --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
     --s1: #2a78d6; --s1-wash: rgba(42,120,214,.10); --s2: #eb6834; --de: #c3c2b7;
     --good-text: #006300; --critical: #d03b3b; --warning: #b57a00;
-    --sans: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
@@ -59,29 +59,29 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>jevtophoto · A 方案：合成特征题库 × Jev</h1>
+    <h1>jevtophoto · phase A: synthetic feature bank × Jev</h1>
     <p class="sub" id="meta"></p>
-    <p class="sub">结论在 <code>RESULTS.md</code>；这页是逐条明细。每条记录两问：<code>junk</code>（该不该删，读众数）、<code>kind</code>；最右一列是规则 + Jev 的端到端栏位。条形图是三次平均分布，蓝色 = 标准答案里的档位。</p>
+    <p class="sub">Conclusions are in <code>RESULTS.md</code>; this page is the per-record detail. Each record has two questions: <code>junk</code> (delete or keep, read by its majority answer) and <code>kind</code>; the last column is the end-to-end column from rules + Jev. Bars show the mean distribution across runs; blue = a level accepted by the answer key.</p>
   </header>
 
   <section>
-    <h2>总览</h2>
+    <h2>Overview</h2>
     <div class="cards" id="cards"></div>
   </section>
 
   <section>
-    <h2>置信度门：< τ 一律进「拿不准」（按次算）</h2>
+    <h2>Confidence gate: below τ always goes to "Not sure" (per run)</h2>
     <div class="tbl-wrap"><table id="gates"></table></div>
   </section>
 
   <section>
-    <h2>逐条明细</h2>
+    <h2>Records</h2>
     <div class="filters">
-      <label>类别 <select id="fCat"><option value="">全部</option></select></label>
-      <label><input type="checkbox" id="fEdge"> 只看边界</label>
-      <label><input type="checkbox" id="fWrong"> 只看答错过的</label>
-      <label><input type="checkbox" id="fFlip"> 只看翻过众数的</label>
-      <label><input type="checkbox" id="fDis"> 只看端到端和 utility 基线分歧的</label>
+      <label>Category <select id="fCat"><option value="">All</option></select></label>
+      <label><input type="checkbox" id="fEdge"> Borderline only</label>
+      <label><input type="checkbox" id="fWrong"> Wrong at least once</label>
+      <label><input type="checkbox" id="fFlip"> Mode flipped</label>
+      <label><input type="checkbox" id="fDis"> Pipeline disagrees with the utility baseline</label>
       <span class="sub" id="count"></span>
     </div>
     <div class="tbl-wrap" style="margin-top:10px"><table id="rows"></table></div>
@@ -94,26 +94,26 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const labelOf = (qk, k) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria[Number(k)] : k; };
-  const descOf = (qk, k) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria[Number(k)] : `${k}：${q.criteria[k]}`; };
+  const descOf = (qk, k) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria[Number(k)] : `${k}: ${q.criteria[k]}`; };
   const keysOf = (qk) => { const q = D.questions[qk]; return q.type === 'score' ? q.criteria.map((_, i) => String(i)) : Object.keys(q.criteria); };
   const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
-  const dz = { delete: '删', unsure: '说不准', keep: '留' };
-  const colZh = { delete: '建议删除', unsure: '拿不准', keep: '保留' };
+  const dz = { delete: 'delete', unsure: 'not sure', keep: 'keep' };
+  const colName = { delete: 'Suggest delete', unsure: 'Not sure', keep: 'Keep' };
   const nEdge = D.recs.filter((r) => r.edge).length;
 
-  $('#meta').textContent = `${D.model} · ${D.ranAt.slice(0, 16).replace('T', ' ')} UTC · ${D.recs.length} 条记录（${nEdge} 条边界）× 3 问 × ${D.reps} 次`;
+  $('#meta').textContent = `${D.model} · ${D.ranAt.slice(0, 16).replace('T', ' ')} UTC · ${D.recs.length} records (${nEdge} borderline) × ${D.qkeys.length} questions × ${D.reps} runs${D.promptsMatch === false ? ' · measured with an earlier Chinese-language version of the question text (not yet rerun in English)' : ''}`;
 
   const acc = (qk) => D.accTable.find((a) => a.qk === qk);
   const cards = [
-    ['junk 清晰案例', `${acc('junk').clear.ok}/${acc('junk').clear.n}`, '按次算，众数 ∈ 标准答案'],
-    ['junk 边界案例', `${acc('junk').edge.ok}/${acc('junk').edge.n}`, '标准答案已放宽成集合'],
-    ['kind', `${acc('kind').all.ok}/${acc('kind').all.n}`, '全部记录按次算'],
-        ['utility 基线 vs 端到端', `错 ${D.cmp.utility.wrong} : ${D.cmp.pipeline.wrong}`, `伤害 ${D.cmp.utility.harm} : ${D.cmp.pipeline.harm} · 漏网 ${D.cmp.utility.miss} : ${D.cmp.pipeline.miss}`],
-    ['端到端（规则 + Jev，门 ' + D.tau + '）', `删 ${D.pipe.del} · 拿不准 ${D.pipe.unsure} · 留 ${D.pipe.keep}`, `伤害 ${D.pipe.harm} · 漏网 ${D.pipe.miss} · 规则定 ${D.pipe.byRule} 条，Jev 定 ${D.pipe.byJev} 条`],
+    ['junk, clear cases', `${acc('junk').clear.ok}/${acc('junk').clear.n}`, 'per run, answer in the key'],
+    ['junk, borderline', `${acc('junk').edge.ok}/${acc('junk').edge.n}`, 'answer key accepts a set'],
+    ['kind', `${acc('kind').all.ok}/${acc('kind').all.n}`, 'all records, per run'],
+        ['utility baseline vs pipeline', `wrong ${D.cmp.utility.wrong} : ${D.cmp.pipeline.wrong}`, `harmful ${D.cmp.utility.harm} : ${D.cmp.pipeline.harm} · missed ${D.cmp.utility.miss} : ${D.cmp.pipeline.miss}`],
+    ['pipeline (rules + Jev, gate ' + D.tau + ')', `delete ${D.pipe.del} · not sure ${D.pipe.unsure} · keep ${D.pipe.keep}`, `harmful ${D.pipe.harm} · missed ${D.pipe.miss} · ${D.pipe.byRule} by rules, ${D.pipe.byJev} by Jev`],
   ];
   $('#cards').innerHTML = cards.map(([k, v, d]) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="d">${esc(d)}</div></div>`).join('');
 
-  $('#gates').innerHTML = `<tr><th>τ</th><th>建议删除</th><th>拿不准</th><th>保留</th><th>伤害</th><th>清晰垃圾被抓到</th><th>边界进了拿不准</th><th>清晰误进拿不准</th><th>保留栏里不该留的</th></tr>`
+  $('#gates').innerHTML = `<tr><th>τ</th><th>Suggest delete</th><th>Not sure</th><th>Keep</th><th>Harmful</th><th>Clear junk caught</th><th>Borderline to Not sure</th><th>Clear to Not sure</th><th>Non-keepers in Keep</th></tr>`
     + D.gates.map((g) => `<tr><td>${g.tau}</td><td>${g.del}</td><td>${g.unsure}</td><td>${g.keep}</td><td class="${g.harm ? 'bad' : 'ok'}">${g.harm}</td><td>${g.junkCaught}/${g.junkTotal}</td><td>${g.edgeUnsure}/${g.edgeTotal}</td><td>${g.clearUnsure}/${g.clearTotal}</td><td>${g.keepWrong}</td></tr>`).join('');
 
   const fCat = $('#fCat');
@@ -123,27 +123,27 @@
     const p = q.avgDist[k] ?? 0, exp = q.expect.includes(k);
     return `<div class="l ${exp ? 'exp' : ''}" title="${esc(descOf(qk, k))}">${esc(labelOf(qk, k))}</div><div class="track"><div class="fill ${exp ? 'exp' : ''}" style="width:${(p * 100).toFixed(1)}%"></div></div><div class="p ${k === q.maj ? 'top' : ''}">${p.toFixed(2)}</div>`;
   }).join('');
-  const qcell = (qk, q) => `<div class="qhead"><span class="${q.majCorrect ? 'ok' : 'bad'}" title="${esc(descOf(qk, q.maj))}">${q.majCorrect ? '✓' : '✗'} ${esc(labelOf(qk, q.maj))}</span><span class="m">${q.correctRuns}/${q.runs.length} 对 · 置信 ${f2(q.conf)}${q.flips ? ` · <span class="warn">翻 ${q.flips}</span>` : ''}</span></div><div class="bars">${bars(qk, q)}</div>`;
+  const qcell = (qk, q) => `<div class="qhead"><span class="${q.majCorrect ? 'ok' : 'bad'}" title="${esc(descOf(qk, q.maj))}">${q.majCorrect ? '✓' : '✗'} ${esc(labelOf(qk, q.maj))}</span><span class="m">${q.correctRuns}/${q.runs.length} correct · confidence ${f2(q.conf)}${q.flips ? ` · <span class="warn">flipped ${q.flips}</span>` : ''}</span></div><div class="bars">${bars(qk, q)}</div>`;
 
   const summ = (s) => { const a = s.asset, r = s.resource, t = s.imageProperties.TIFF, v = s.vision, d = s.derived;
     const bits = [a.mediaType === 'video' ? `video ${a.duration}s` : null, ...a.mediaSubtypes, a.playbackStyle === 'imageAnimated' ? 'GIF' : null, r.contentType.replace(/^(public\.|com\.apple\.|com\.compuserve\.)/, ''), `${a.pixelWidth}×${a.pixelHeight}`,
-      t.Model ?? '无 EXIF', a.sourceType === 'typeCloudShared' ? '共享相簿' : null, `脸 ${v.faceCount}`, `字 ${v.recognizedTextCharCount}`, v.barcodeCount ? `码 ${v.barcodeCount}` : null, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'utility' : null,
-      `美 ${v.aesthetics.overallScore}`, `清 ${d.sharpness}`, `亮 ${d.meanLuminance}`, `${d.daysSinceCreation}d${d.daysSinceAdded !== d.daysSinceCreation ? `（进相册 ${d.daysSinceAdded}d）` : ''}`,
-      d.exactDuplicateCount ? `副本 ${d.exactDuplicateCount}` : null, d.nearDuplicateCount ? `近重复 ${d.nearDuplicateCount}` : null, d.isSharpestInBurst === false ? '非最清晰' : d.isSharpestInBurst === true ? '最清晰' : null,
-      a.burstIdentifier ? `连拍${a.burstSelectionTypes.length ? ' ' + a.burstSelectionTypes.join('+') : ''}` : null, a.isFavorite ? '★' : null, a.adjustmentsState !== 'none' ? a.adjustmentsState : null, a.extendedMetadata ? 'caption!' : null];
+      t.Model ?? 'no EXIF', a.sourceType === 'typeCloudShared' ? 'shared album' : null, `faces ${v.faceCount}`, `chars ${v.recognizedTextCharCount}`, v.barcodeCount ? `barcodes ${v.barcodeCount}` : null, d.ocrDocType !== 'none' ? d.ocrDocType : null, v.aesthetics.isUtility ? 'utility' : null,
+      `aesth ${v.aesthetics.overallScore}`, `sharp ${d.sharpness}`, `lum ${d.meanLuminance}`, `${d.daysSinceCreation}d${d.daysSinceAdded !== d.daysSinceCreation ? ` (added ${d.daysSinceAdded}d)` : ''}`,
+      d.exactDuplicateCount ? `copies ${d.exactDuplicateCount}` : null, d.nearDuplicateCount ? `near-dups ${d.nearDuplicateCount}` : null, d.isSharpestInBurst === false ? 'not sharpest' : d.isSharpestInBurst === true ? 'sharpest' : null,
+      a.burstIdentifier ? `burst${a.burstSelectionTypes.length ? ' ' + a.burstSelectionTypes.join('+') : ''}` : null, a.isFavorite ? '★' : null, a.adjustmentsState !== 'none' ? a.adjustmentsState : null, a.extendedMetadata ? 'caption!' : null];
     return bits.filter((b) => b != null).join(' · '); };
 
   function render() {
     const cat = fCat.value, onlyEdge = $('#fEdge').checked, onlyWrong = $('#fWrong').checked, onlyFlip = $('#fFlip').checked, onlyDis = $('#fDis').checked;
     const rows = D.recs.filter((r) => (!cat || r.cat === cat) && (!onlyEdge || r.edge) && (!onlyWrong || D.qkeys.some((qk) => r.q[qk].correctRuns < r.q[qk].runs.length))
-      && (!onlyFlip || D.qkeys.some((qk) => r.q[qk].flips > 0)) && (!onlyDis || r.baseline.utility.decision !== r.jevDecision));
-    $('#count').textContent = `${rows.length} 条`;
-    $('#rows').innerHTML = `<tr><th>记录</th><th>junk · 该不该删</th><th>kind</th><th>keep</th><th>端到端 vs 基线</th></tr>` + rows.map((r) => {
+      && (!onlyFlip || D.qkeys.some((qk) => r.q[qk].flips > 0)) && (!onlyDis || r.baseline.utility.decision !== r.pipe.column));
+    $('#count').textContent = `${rows.length} records`;
+    $('#rows').innerHTML = `<tr><th>Record</th>${D.qkeys.map((qk) => `<th>${qk === 'junk' ? 'junk · delete or keep' : qk}</th>`).join('')}<th>Pipeline vs baselines</th></tr>` + rows.map((r) => {
       const gold = r.gold.map((d) => dz[d]).join('|');
       const dec = (d, name) => `<div><span class="note">${name}</span> <span class="${r.gold.includes(d) ? 'ok' : 'bad'}">${dz[d]}</span></div>`;
-      return `<tr><td style="max-width:280px"><div class="id">${esc(r.id)}</div><div style="margin:3px 0"><span class="chip">${esc(D.cats[r.cat])}</span> ${r.edge ? '<span class="chip edge">边界</span>' : ''}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}<div class="note" style="margin-top:4px">${esc(summ(r.state))}</div><details><summary>state</summary><pre>${esc(JSON.stringify(r.state, null, 1))}</pre></details></td>`
+      return `<tr><td style="max-width:280px"><div class="id">${esc(r.id)}</div><div style="margin:3px 0"><span class="chip">${esc(D.cats[r.cat])}</span> ${r.edge ? '<span class="chip edge">borderline</span>' : ''}</div>${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}<div class="note" style="margin-top:4px">${esc(summ(r.state))}</div><details><summary>state</summary><pre>${esc(JSON.stringify(r.state, null, 1))}</pre></details></td>`
         + D.qkeys.map((qk) => `<td>${qcell(qk, r.q[qk])}</td>`).join('')
-        + `<td><div><span class="note">标准</span> ${esc(gold)}</div><div><span class="note">端到端</span> <span class="${r.pipe.column === 'unsure' ? 'warn' : r.gold.includes(r.pipe.column) ? 'ok' : 'bad'}">${esc(colZh[r.pipe.column])}</span> <span class="note">${r.pipe.by === 'rule' ? '规则' : 'Jev'}：${esc(r.pipe.reason)}</span></div>${dec(r.jevDecision, 'Jev 单独')}${dec(r.baseline.utility.decision, 'utility 基线')}</td></tr>`;
+        + `<td><div><span class="note">expected</span> ${esc(gold)}</div><div><span class="note">pipeline</span> <span class="${r.pipe.column === 'unsure' ? 'warn' : r.gold.includes(r.pipe.column) ? 'ok' : 'bad'}">${esc(colName[r.pipe.column])}</span> <span class="note">${r.pipe.by === 'rule' ? 'rule' : 'Jev'}: ${esc(r.pipe.reason)}</span></div>${dec(r.jevDecision, 'Jev alone')}${dec(r.baseline.utility.decision, 'utility baseline')}</td></tr>`;
     }).join('');
   }
   for (const id of ['fCat', 'fEdge', 'fWrong', 'fFlip', 'fDis']) document.getElementById(id).addEventListener('change', render);

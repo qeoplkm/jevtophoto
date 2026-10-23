@@ -1,4 +1,4 @@
-// 本地看审核页：静态托管 out/（review.html 里的缩略图是相对路径，file:// 打开有的浏览器不显示）。
+// Serve out/ locally to view the review page (thumbnails in review.html use relative paths that some browsers block over file://).
 //   node tools/extract/serve-out.js            # http://localhost:8791/downloads/review.html
 const http = require('node:http');
 const fs = require('node:fs');
@@ -17,4 +17,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(target)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(data);
   });
-}).listen(PORT, () => console.log(`审核页  ->  http://localhost:${PORT}/downloads/review.html`));
+}).listen(PORT, () => console.log(`Review page  ->  http://localhost:${PORT}/downloads/review.html`));

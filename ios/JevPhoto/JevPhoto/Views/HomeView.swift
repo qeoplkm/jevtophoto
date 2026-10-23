@@ -1,4 +1,4 @@
-// 首页：授权 → 选来源 → 跑 → 看结果。不删任何东西。
+// Home: authorize → pick a source → run → see results. Nothing is deleted.
 import SwiftUI
 import Photos
 
@@ -14,56 +14,56 @@ struct HomeView: View {
         NavigationStack {
             List {
                 Section {
-                    Text("代码在手机上从每张照片抽结构化特征（PhotoKit / Vision），规则先过一遍，剩下的问 Jev「该不该删、是哪类」，分三栏给你看。像素、文件名、OCR 原文都不出手机；这个 app 不会删除或修改任何照片。")
+                    Text("On this phone, code extracts structured features from each photo (PhotoKit / Vision), hard rules go first, and Jev is asked about the rest: delete or keep, and what kind of photo it is. Results come in three columns. Pixels, file names and OCR text never leave the phone; this app never deletes or changes any photo.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-                Section("相册") {
+                Section("Photo library") {
                     if authorized {
-                        Label(session.authorization == .limited ? "已授权（部分照片）" : "已授权", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                        Picker("来源", selection: $selected) {
-                            Text("选一个").tag(PhotoSource?.none)
+                        Label(session.authorization == .limited ? "Authorized (selected photos)" : "Authorized", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        Picker("Source", selection: $selected) {
+                            Text("Choose").tag(PhotoSource?.none)
                             ForEach(session.albums) { s in Text(s.title).tag(PhotoSource?.some(s)) }
                         }
-                        Toggle("原图在 iCloud 的也下载（慢，费流量）", isOn: $session.allowICloud)
+                        Toggle("Also download originals stored in iCloud (slow, uses data)", isOn: $session.allowICloud)
                     } else {
-                        Button { Task { await session.requestAccess() } } label: { Label("允许读取相册", systemImage: "photo.on.rectangle") }
-                        if session.authorization == .denied { Text("被拒绝了：到 设置 › 隐私与安全性 › 照片 里打开。").font(.footnote).foregroundStyle(.secondary) }
+                        Button { Task { await session.requestAccess() } } label: { Label("Allow photo library access", systemImage: "photo.on.rectangle") }
+                        if session.authorization == .denied { Text("Access denied: turn it on in Settings › Privacy & Security › Photos.").font(.footnote).foregroundStyle(.secondary) }
                     }
                 }
                 Section("Jev") {
-                    HStack { Text("API key"); Spacer(); Text(session.apiKey.isEmpty ? "未设置" : "已设置（\(session.apiKey.prefix(6))…）").foregroundStyle(session.apiKey.isEmpty ? .red : .secondary) }
-                    Toggle("激进模式（截图 / 存图不看天数，文档照片过两周就删，门槛 0.2）", isOn: $session.aggressive)
-                    HStack { Text("拿不准的门槛 τ"); Spacer(); Text(String(format: "%.1f", session.tau)).monospacedDigit() }
+                    HStack { Text("API key"); Spacer(); Text(session.apiKey.isEmpty ? "Not set" : "Set (\(session.apiKey.prefix(6))…)").foregroundStyle(session.apiKey.isEmpty ? .red : .secondary) }
+                    Toggle("Aggressive mode (screenshots / saved images regardless of age, document photos deleted after two weeks, gate 0.2)", isOn: $session.aggressive)
+                    HStack { Text("\"Not sure\" gate τ"); Spacer(); Text(String(format: "%.1f", session.tau)).monospacedDigit() }
                     Slider(value: $session.tau, in: 0...0.9, step: 0.1)
-                    Button("设置") { showSettings = true }
+                    Button("Settings") { showSettings = true }
                 }
                 Section {
                     Button {
                         if let s = selected { session.run(s) }
                     } label: {
-                        HStack { Spacer(); Text(session.phase.isRunning ? "跑着呢…" : "开始").bold(); Spacer() }
+                        HStack { Spacer(); Text(session.phase.isRunning ? "Running…" : "Start").bold(); Spacer() }
                     }
                     .disabled(!authorized || selected == nil || session.phase.isRunning)
                     switch session.phase {
                     case .idle: EmptyView()
-                    case .extracting(let d, let n): ProgressView(value: Double(d), total: Double(n)) { Text("抽特征 \(d)/\(n)") }
-                    case .asking(let d, let n): ProgressView(value: Double(d), total: Double(n)) { Text("问 Jev \(d)/\(n)（规则已定 \(session.records.count - n) 条）") }
+                    case .extracting(let d, let n): ProgressView(value: Double(d), total: Double(n)) { Text("Extracting features \(d)/\(n)") }
+                    case .asking(let d, let n): ProgressView(value: Double(d), total: Double(n)) { Text("Asking Jev \(d)/\(n) (\(session.records.count - n) decided by rules)") }
                     case .done:
-                        Label("完成：建议删除 \(session.column(.delete).count) · 拿不准 \(session.column(.unsure).count) · 保留 \(session.column(.keep).count)", systemImage: "checkmark.seal")
+                        Label("Done: suggest delete \(session.column(.delete).count) · not sure \(session.column(.unsure).count) · keep \(session.column(.keep).count)", systemImage: "checkmark.seal")
                         if let m = session.model { Text(m).font(.caption).foregroundStyle(.secondary) }
                     case .failed(let msg): Label(msg, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     }
                     if !session.records.isEmpty {
-                        NavigationLink("看结果（\(session.records.count) 张）") { ResultsView() }
+                        NavigationLink("See results (\(session.records.count) photos)") { ResultsView() }
                     }
                 }
-                if !session.log.isEmpty { Section("错误") { ForEach(session.log, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) } } }
+                if !session.log.isEmpty { Section("Errors") { ForEach(session.log, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) } } }
             }
             .navigationTitle("JevPhoto")
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(session) }
             .task {
                 if authorized { session.loadAlbums() }
-                // 无头验证：JEV_AUTORUN=recent:50 启动就跑，结果写到 Documents/jevphoto-autorun.json
+                // headless check: JEV_AUTORUN=recent:50 runs on launch and writes Documents/jevphoto-autorun.json
                 if let spec = ProcessInfo.processInfo.environment["JEV_AUTORUN"], session.phase == .idle {
                     if let prof = ProcessInfo.processInfo.environment["JEV_PROFILE"] { session.aggressive = (prof == "aggressive") }
                     if !authorized { await session.requestAccess() }
@@ -87,15 +87,15 @@ struct SettingsView: View {
             Form {
                 Section("OpenRouter API key") {
                     SecureField("sk-or-…", text: $session.apiKey)
-                    Text("只用来调 ~typesafe/jev-latest。存在这台手机的 UserDefaults 里。打包时若带了 Secrets.plist 会自动填。").font(.footnote).foregroundStyle(.secondary)
+                    Text("Used only to call ~typesafe/jev-latest. Stored in this phone\u{2019}s UserDefaults. Filled in automatically if the build includes Secrets.plist.").font(.footnote).foregroundStyle(.secondary)
                 }
-                Section("反馈") {
-                    Text("已标记 \(session.feedback.count) 条 👍/👎。").font(.footnote)
-                    Button("清空反馈", role: .destructive) { session.feedback = [:]; UserDefaults.standard.removeObject(forKey: "jev.feedback") }
+                Section("Feedback") {
+                    Text("\(session.feedback.count) photos labelled 👍/👎.").font(.footnote)
+                    Button("Clear feedback", role: .destructive) { session.feedback = [:]; UserDefaults.standard.removeObject(forKey: "jev.feedback") }
                 }
             }
-            .navigationTitle("设置")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .navigationTitle("Settings")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 }

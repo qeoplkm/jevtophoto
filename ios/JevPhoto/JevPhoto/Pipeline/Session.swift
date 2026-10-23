@@ -1,4 +1,4 @@
-// 一次扫描：选来源 → 抽特征 → 规则 → Jev → 三栏。什么都不删。结果 + 你的 👍👎 可以导出成 JSON 拿回 Mac 分析。
+// One scan: pick a source → extract features → rules → Jev → three columns. Nothing is deleted. Results + your 👍👎 can be exported as JSON for analysis on a Mac.
 import Foundation
 import Photos
 import SwiftUI
@@ -7,7 +7,7 @@ enum PhotoSource: Hashable, Identifiable {
     case recent(Int)
     case album(String, String)   // localIdentifier, title
     var id: String { switch self { case .recent(let n): return "recent-\(n)"; case .album(let id, _): return "album-\(id)" } }
-    var title: String { switch self { case .recent(let n): return "最近 \(n) 张"; case .album(_, let t): return "相簿「\(t)」" } }
+    var title: String { switch self { case .recent(let n): return "Latest \(n)"; case .album(_, let t): return "Album “\(t)”" } }
 }
 
 enum Phase: Equatable {
@@ -24,7 +24,7 @@ final class Session: ObservableObject {
     @Published var feedback: [String: String] = UserDefaults.standard.dictionary(forKey: "jev.feedback") as? [String: String] ?? [:]
     @Published var apiKey: String = UserDefaults.standard.string(forKey: "jev.apiKey") ?? Session.bundledKey() ?? "" { didSet { UserDefaults.standard.set(apiKey, forKey: "jev.apiKey") } }
     @Published var tau: Double = ((UserDefaults.standard.object(forKey: "jev.aggressive") as? Bool) ?? true) ? PROFILE_AGGRESSIVE_TAU : DEFAULT_TAU
-    @Published var aggressive: Bool = (UserDefaults.standard.object(forKey: "jev.aggressive") as? Bool) ?? true {   // 默认激进：保守档在手机上实测太保守
+    @Published var aggressive: Bool = (UserDefaults.standard.object(forKey: "jev.aggressive") as? Bool) ?? true {   // aggressive by default: the conservative profile was too timid on a real phone
         didSet { UserDefaults.standard.set(aggressive, forKey: "jev.aggressive"); tau = aggressive ? PROFILE_AGGRESSIVE_TAU : DEFAULT_TAU }
     }
     var questions: J { aggressive ? QUESTIONS_AGGRESSIVE : QUESTIONS }
@@ -50,14 +50,14 @@ final class Session: ObservableObject {
         let cols = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
         cols.enumerateObjects { c, _, _ in
             let n = PHAsset.fetchAssets(in: c, options: nil).count
-            if n > 0 { out.append(.album(c.localIdentifier, "\(c.localizedTitle ?? "?")（\(n)）")) }
+            if n > 0 { out.append(.album(c.localIdentifier, "\(c.localizedTitle ?? "?") (\(n))")) }
         }
         albums = out
     }
 
     func fetchAssets(_ src: PhotoSource) -> [PHAsset] {
         let opts = PHFetchOptions()
-        opts.includeAllBurstAssets = true          // 不开拿不到非封面的连拍
+        opts.includeAllBurstAssets = true          // otherwise non-cover burst frames are missing
         opts.includeHiddenAssets = false
         opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         var result: PHFetchResult<PHAsset>
@@ -79,7 +79,7 @@ final class Session: ObservableObject {
         source = src; startedAt = Date(); records = []; log = []; model = nil
         Task {
             let assets = fetchAssets(src)
-            if assets.isEmpty { phase = .failed("这个来源里没有照片"); return }
+            if assets.isEmpty { phase = .failed("This source has no photos"); return }
             phase = .extracting(0, assets.count)
             var recs: [PhotoRecord] = []
             for (i, a) in assets.enumerated() {
@@ -91,17 +91,17 @@ final class Session: ObservableObject {
             let days = recentDays, qs = questions
             for i in recs.indices { recs[i].rule = applyRules(recs[i].state, recentScreenshotDays: days); recs[i].decision = decide(recs[i].state, rule: recs[i].rule, junk: nil, tau: tau); recs[i].local = localDecide(recs[i].state, recentScreenshotDays: days) }
             records = recs
-            // 规则管不到的问 Jev
+            // ask Jev about what the rules don't cover
             let toAsk = recs.indices.filter { recs[$0].rule.verdict == nil }
             if toAsk.isEmpty { phase = .done; persistLastRun(); return }
-            guard !apiKey.isEmpty else { phase = .failed("没有 API key：规则定了 \(recs.count - toAsk.count) 条，剩下 \(toAsk.count) 条没问 Jev。到设置里填 key。"); return }
+            guard !apiKey.isEmpty else { phase = .failed("No API key: rules decided \(recs.count - toAsk.count), the remaining \(toAsk.count) were not sent to Jev. Add a key in Settings."); return }
             phase = .asking(0, toAsk.count)
             let client = JevClient(apiKey: apiKey)
             var done = 0
             await withTaskGroup(of: (Int, Result<(String?, [String: JevAnswer], Int, Int), Error>).self) { group in
                 var next = 0, inFlight = 0
                 let states = recs.map { $0.state.toJ() }
-                // 最多 4 个在飞
+                // at most 4 in flight
                 while next < toAsk.count && inFlight < 4 {
                     let i = toAsk[next]; next += 1; inFlight += 1
                     let st = states[i]
@@ -116,8 +116,8 @@ final class Session: ObservableObject {
                         recs[i].junk = answers["junk"]; recs[i].kind = answers["kind"]
                         recs[i].decision = decide(recs[i].state, rule: recs[i].rule, junk: recs[i].junk, tau: tau)
                     case .failure(let e):
-                        recs[i].notes.append("Jev 调用失败：\(e.localizedDescription)")
-                        recs[i].decision = Decision(column: .unsure, by: "none", reason: "Jev 调用失败")
+                        recs[i].notes.append("Jev call failed: \(e.localizedDescription)")
+                        recs[i].decision = Decision(column: .unsure, by: "none", reason: "Jev call failed")
                         log.append("\(recs[i].id.prefix(8))… \(e.localizedDescription)")
                     }
                     records = recs
@@ -145,13 +145,13 @@ final class Session: ObservableObject {
         persistLastRun()
     }
 
-    // 每次跑完 / 每次标注都把结果写到 Documents/last-run.json，Mac 上 devicectl 直接拉，不用手动导出
+    // after every run and every label, write Documents/last-run.json so a Mac can pull it with devicectl, no manual export needed
     func persistLastRun() {
         guard !records.isEmpty, let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         try? exportJSON().encode(pretty: true).write(to: dir.appendingPathComponent("last-run.json"), atomically: true, encoding: .utf8)
     }
 
-    // 导出：和 tools/extract 的 decisions.json 同构，拿回 Mac 用同一套脚本看
+    // export: same structure as decisions.json from tools/extract, so the same scripts work on it
     func exportJSON() -> J {
         .obj([
             ("generatedAt", .s(ISO8601DateFormatter().string(from: Date()))), ("mode", .s("iphone")), ("source", .s(source?.title ?? "")),

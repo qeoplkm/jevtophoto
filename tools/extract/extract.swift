@@ -1,12 +1,12 @@
-// B 阶段：从照片抽结构化特征，输出和 tools/capability/items.js 的 SHAPE 同名同值的 JSON。像素不出这台机器。
+// Phase B: extract structured features from photos as JSON whose names and values match SHAPE in tools/capability/items.js. Pixels never leave this machine.
 //
-//   swiftc -O -o tools/extract/extract tools/extract/extract.swift      # 编译（macOS 15+，Vision 美学分要 15+）
-//   tools/extract/extract --folder ~/Downloads --out out/downloads       # 文件夹模式：不碰 PhotoKit，不用权限，冒烟用
-//   tools/extract/extract --album "Jev 测试" --out out/jev-test           # PhotoKit 模式（下一步）
+//   swiftc -O -o tools/extract/extract tools/extract/extract.swift      # build (macOS 15+; Vision aesthetics needs 15+)
+//   tools/extract/extract --folder ~/Downloads --out out/downloads       # folder mode: no PhotoKit, no permission prompt, for smoke tests
+//   tools/extract/extract --album "Jev test" --out out/jev-test           # PhotoKit mode (not implemented yet)
 //
-// 文件夹模式拿不到的 PhotoKit 字段按「不知道」填：mediaSubtypes 只能从 EXIF UserComment 认出 iOS 截图、从 GIF 帧数认出动图；
-// isFavorite / isHidden / hasAdjustments / burst* 一律 false / null；sourceType 固定 typeUserLibrary。
-// 输出 <out>/features.json + <out>/thumbs/<id>.jpg（256px，只给审核页看）。
+// PhotoKit fields folder mode cannot know are filled as unknown: mediaSubtypes can only detect iOS screenshots (EXIF UserComment) and GIFs (frame count);
+// isFavorite / isHidden / hasAdjustments / burst* are always false / null; sourceType is always typeUserLibrary.
+// Output: <out>/features.json + <out>/thumbs/<id>.jpg (256 px, only for the review page).
 import Foundation
 import ImageIO
 import CoreGraphics
@@ -15,7 +15,7 @@ import AVFoundation
 import CryptoKit
 import UniformTypeIdentifiers
 
-// ---------- 有序 JSON（字段顺序是 prompt 的一部分，Dictionary 不保序） ----------
+// ---------- ordered JSON (key order is part of the prompt; Dictionary does not preserve order) ----------
 indirect enum J {
     case obj([(String, J)]), arr([J]), s(String), d(Double), i(Int), b(Bool), null
     static func num(_ v: Double?, digits: Int = 3) -> J {
@@ -52,7 +52,7 @@ func encode(_ j: J, _ ind: Int = 0) -> String {
     }
 }
 
-// ---------- 参数 ----------
+// ---------- arguments ----------
 var folder: String? = nil, album: String? = nil, outDir = "out/extract"
 var args = Array(CommandLine.arguments.dropFirst())
 while !args.isEmpty {
@@ -61,11 +61,11 @@ while !args.isEmpty {
     case "--folder": folder = args.removeFirst()
     case "--album": album = args.removeFirst()
     case "--out": outDir = args.removeFirst()
-    default: FileHandle.standardError.write("未知参数 \(a)\n".data(using: .utf8)!); exit(2)
+    default: FileHandle.standardError.write("Unknown argument \(a)\n".data(using: .utf8)!); exit(2)
     }
 }
-if album != nil { FileHandle.standardError.write("PhotoKit 模式还没写，先用 --folder\n".data(using: .utf8)!); exit(2) }
-guard let folder = folder else { FileHandle.standardError.write("用法：extract --folder <dir> --out <dir>\n".data(using: .utf8)!); exit(2) }
+if album != nil { FileHandle.standardError.write("PhotoKit mode is not implemented yet; use --folder\n".data(using: .utf8)!); exit(2) }
+guard let folder = folder else { FileHandle.standardError.write("Usage: extract --folder <dir> --out <dir>\n".data(using: .utf8)!); exit(2) }
 
 let fm = FileManager.default
 let thumbsDir = (outDir as NSString).appendingPathComponent("thumbs")
@@ -76,9 +76,9 @@ let VIDEO_EXT: Set<String> = ["mov", "mp4", "m4v"]
 let NOW = Date()
 let ANALYSIS_MAX_PIXEL = 1024
 let THUMB_MAX_PIXEL = 256
-let NEAR_DUP_DISTANCE: Float = 0.4   // VNFeaturePrint 距离阈值，拍的；真图上要看分布再定
+let NEAR_DUP_DISTANCE: Float = 0.4   // VNFeaturePrint distance threshold, a guess; check the distribution on real photos
 
-// ---------- 图像工具 ----------
+// ---------- image helpers ----------
 func downscaled(_ src: CGImageSource, maxPixel: Int) -> CGImage? {
     let opts: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: maxPixel,
                                  kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCache: false]
@@ -93,7 +93,7 @@ func resized(_ img: CGImage, maxPixel: Int) -> CGImage? {
     ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
     return ctx.makeImage()
 }
-// 灰度 512px：平均亮度 + Laplacian 方差（清晰度）
+// 512 px grayscale: mean luminance + Laplacian variance (sharpness)
 func grayStats(_ img: CGImage) -> (meanLuminance: Double, laplacianVar: Double)? {
     let scale = min(1.0, 512.0 / Double(max(img.width, img.height)))
     let w = max(3, Int(Double(img.width) * scale)), h = max(3, Int(Double(img.height) * scale))
@@ -116,7 +116,7 @@ func grayStats(_ img: CGImage) -> (meanLuminance: Double, laplacianVar: Double)?
     let lmean = lsum / n
     return (mean, lsq / n - lmean * lmean)
 }
-// Laplacian 方差 → 0–1：var 10 → 0，100 → 0.4，1000 → 0.8，3000 → 1。刻度是拍的，真图上要重看
+// Laplacian variance → 0–1: var 10 → 0, 100 → 0.4, 1000 → 0.8, 3000 → 1. The scale is a guess; recheck on real photos
 func sharpnessScore(_ v: Double) -> Double { min(1, max(0, (log10(v + 1) - 1) / 2.5)) }
 
 func writeThumb(_ img: CGImage, to path: String) {
@@ -126,7 +126,9 @@ func writeThumb(_ img: CGImage, to path: String) {
     CGImageDestinationFinalize(dest)
 }
 
-// ---------- OCR 派生：原文不出去，只出字数 / 有没有金额 / 单据类型 ----------
+// ---------- OCR-derived features: the text never leaves, only character count / has an amount / document type ----------
+// Keywords are matched against uppercased OCR text. The Chinese terms below are deliberate keyword data so that
+// Chinese-language receipts, IDs, boarding passes and tickets are recognised too.
 func ocrDerived(_ text: String) -> (charCount: Int, hasAmount: Bool, docType: String) {
     let compact = text.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
     let up = text.uppercased()
@@ -142,7 +144,7 @@ func ocrDerived(_ text: String) -> (charCount: Int, hasAmount: Bool, docType: St
     return (compact.count, amount, docType)
 }
 
-// ---------- 每个文件的中间结果 ----------
+// ---------- per-file intermediate result ----------
 struct Rec {
     var id: String, file: String, thumb: String?
     var mediaType = "image", subtypes: [String] = [], playbackStyle = "image", width = 0, height = 0, duration = 0.0
@@ -164,7 +166,7 @@ func runVision(_ img: CGImage, _ r: inout Rec) {
     var reqs: [VNRequest] = [face, text, barcode, fp, cls]
     var aesth: VNCalculateImageAestheticsScoresRequest? = nil
     if #available(macOS 15.0, *) { let a = VNCalculateImageAestheticsScoresRequest(); aesth = a; reqs.append(a) }
-    do { try VNImageRequestHandler(cgImage: img, options: [:]).perform(reqs) } catch { FileHandle.standardError.write("  Vision 失败 \(r.file): \(error)\n".data(using: .utf8)!) }
+    do { try VNImageRequestHandler(cgImage: img, options: [:]).perform(reqs) } catch { FileHandle.standardError.write("  Vision failed \(r.file): \(error)\n".data(using: .utf8)!) }
     r.faceCount = face.results?.count ?? 0
     let str = (text.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     let o = ocrDerived(str); r.textChars = o.charCount; r.ocrHasAmount = o.hasAmount; r.ocrDocType = o.docType
@@ -227,11 +229,11 @@ func processVideo(_ url: URL, _ r: inout Rec) -> Bool {
     return true
 }
 
-// ---------- 主流程 ----------
+// ---------- main ----------
 let urls = ((try? fm.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [])
     .filter { IMAGE_EXT.contains($0.pathExtension.lowercased()) || VIDEO_EXT.contains($0.pathExtension.lowercased()) }
     .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-print("\(folder)：\(urls.count) 个媒体文件 → \(outDir)")
+print("\(folder): \(urls.count) media files → \(outDir)")
 
 var recs: [Rec] = []
 var usedIds = Set<String>()
@@ -248,12 +250,12 @@ for url in urls {
     if let data = fm.contents(atPath: url.path) { r.sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     let ok = VIDEO_EXT.contains(url.pathExtension.lowercased()) ? processVideo(url, &r) : processImage(url, &r)
     r.addedDate = rv?.addedToDirectoryDate ?? r.creationDate
-    if !ok { FileHandle.standardError.write("  跳过（读不出来）：\(url.lastPathComponent)\n".data(using: .utf8)!); continue }
-    print("  \(r.file.padding(toLength: 36, withPad: " ", startingAt: 0)) \(r.mediaType) \(r.width)×\(r.height) 脸\(r.faceCount) 字\(r.textChars) 码\(r.barcodeCount) 美\(r.aesthetic.map { String(format: "%.2f", $0) } ?? "-") \(r.isUtility == true ? "utility " : "")清\(r.sharpness.map { String(format: "%.2f", $0) } ?? "-") 亮\(r.meanLuminance.map { String(format: "%.2f", $0) } ?? "-") \(r.ocrDocType != "none" ? r.ocrDocType + " " : "")\(r.model ?? "无EXIF")")
+    if !ok { FileHandle.standardError.write("  skipped (unreadable): \(url.lastPathComponent)\n".data(using: .utf8)!); continue }
+    print("  \(r.file.padding(toLength: 36, withPad: " ", startingAt: 0)) \(r.mediaType) \(r.width)×\(r.height) faces \(r.faceCount) chars \(r.textChars) barcodes \(r.barcodeCount) aesth \(r.aesthetic.map { String(format: "%.2f", $0) } ?? "-") \(r.isUtility == true ? "utility " : "")sharp \(r.sharpness.map { String(format: "%.2f", $0) } ?? "-") lum \(r.meanLuminance.map { String(format: "%.2f", $0) } ?? "-") \(r.ocrDocType != "none" ? r.ocrDocType + " " : "")\(r.model ?? "no EXIF")")
     recs.append(r)
 }
 
-// 精确重复：文件哈希；近重复：特征印距离；「最清晰」：近重复连通分量里 sharpness 最高
+// exact duplicates: file hash; near duplicates: feature-print distance; "sharpest": highest sharpness in a near-duplicate connected component
 for i in recs.indices {
     recs[i].exactDup = recs.enumerated().filter { $0.offset != i && !$0.element.sha.isEmpty && $0.element.sha == recs[i].sha }.count
 }
@@ -277,7 +279,7 @@ for (_, members) in groups where members.count > 1 {
     for m in members { recs[m].sharpestInBurst = (m == best) }
 }
 
-// ---------- 输出：state 的形状和 items.js 的 SHAPE 完全一致 ----------
+// ---------- output: the state has exactly the shape of SHAPE in items.js ----------
 let iso8601: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f }()
 func days(_ d: Date) -> Int { max(0, Int(NOW.timeIntervalSince(d) / 86400)) }
 func stateOf(_ r: Rec) -> J {
@@ -309,8 +311,8 @@ func stateOf(_ r: Rec) -> J {
 }
 let out = J.obj([
     ("generatedAt", .s(iso8601.string(from: NOW))), ("mode", .s("folder")), ("source", .s(folder)),
-    ("notes", .arr([.s("文件夹模式：isFavorite / isHidden / hasAdjustments / burst* / sourceType 拿不到，按默认填；mediaSubtypes 只认得出 iOS 截图（EXIF UserComment）和 GIF"),
-                    .s("sharpness = Laplacian 方差的对数刻度，meanLuminance = 512px 灰度均值，nearDuplicate 用 VNFeaturePrint 距离 < \(NEAR_DUP_DISTANCE)；阈值都是拍的")])),
+    ("notes", .arr([.s("Folder mode: isFavorite / isHidden / hasAdjustments / burst* / sourceType are unavailable and filled with defaults; mediaSubtypes only recognises iOS screenshots (EXIF UserComment) and GIFs"),
+                    .s("sharpness = log scale of Laplacian variance, meanLuminance = 512 px grayscale mean, nearDuplicate = VNFeaturePrint distance < \(NEAR_DUP_DISTANCE); all thresholds are guesses")])),
     ("records", .arr(recs.map { r in
         .obj([("id", .s(r.id)), ("file", .s(r.file)), ("thumbnail", J.str(r.thumb)),
               ("dates", .obj([("creationDate", .s(iso8601.string(from: r.creationDate))), ("addedDate", .s(iso8601.string(from: r.addedDate)))])),
@@ -319,4 +321,4 @@ let out = J.obj([
 ])
 let outPath = (outDir as NSString).appendingPathComponent("features.json")
 try! (encode(out) + "\n").write(toFile: outPath, atomically: true, encoding: .utf8)
-print("写入 \(outPath)：\(recs.count) 条记录，缩略图在 \(thumbsDir)")
+print("Wrote \(outPath): \(recs.count) records, thumbnails in \(thumbsDir)")

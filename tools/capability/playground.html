@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jevtophoto 题库交互台</title>
+<title>jevtophoto playground</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root {
@@ -12,7 +12,7 @@
     --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
     --s1: #2a78d6; --s1-wash: rgba(42,120,214,.10); --s2: #eb6834; --de: #c3c2b7;
     --good-text: #006300; --critical: #d03b3b; --warning: #b57a00;
-    --sans: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
@@ -93,21 +93,21 @@
 </head>
 <body>
   <div class="top">
-    <h1>jevtophoto 题库交互台</h1>
-    <span class="model" id="model">连接中…</span>
+    <h1>jevtophoto playground</h1>
+    <span class="model" id="model">Connecting…</span>
     <span class="spacer"></span>
     <div class="tally" id="tally"></div>
-    <label class="cb"><input type="checkbox" id="onlyEdge"> 只看边界</label>
-    <label class="cb"><input type="checkbox" id="onlyWrong"> 只看答错的</label>
-    <button id="runVisible">跑当前列表</button>
-    <button id="stop" hidden>停止</button>
-    <button id="clear">清空结果</button>
+    <label class="cb"><input type="checkbox" id="onlyEdge"> Borderline only</label>
+    <label class="cb"><input type="checkbox" id="onlyWrong"> Wrong only</label>
+    <button id="runVisible">Run visible</button>
+    <button id="stop" hidden>Stop</button>
+    <button id="clear">Clear results</button>
   </div>
   <div class="layout">
     <nav id="nav"></nav>
     <main id="main">
       <details class="card ins" open>
-        <summary>问题的指令</summary>
+        <summary>Question instructions</summary>
         <div id="ins"></div>
       </details>
       <div id="groups"></div>
@@ -131,7 +131,7 @@
   const labelOf = (q, k) => (q.type === 'score' ? q.criteria[Number(k)] : `${k} · ${q.criteria[k]}`);
   const shortOf = (q, k) => (q.type === 'score' ? q.criteria[Number(k)] : k);
 
-  $('#ins').append(...QKEYS.map((k) => el('div', { style: 'margin-top:8px' }, el('div', { class: 'mono', style: 'font-weight:500' }, `${k}（${Q[k].type}）`), el('p', { text: Q[k].instructions }),
+  $('#ins').append(...QKEYS.map((k) => el('div', { style: 'margin-top:8px' }, el('div', { class: 'mono', style: 'font-weight:500' }, `${k} (${Q[k].type})`), el('p', { text: Q[k].instructions }),
     el('div', { class: 'bars', style: 'margin-top:4px' }, ...keysOf(Q[k]).flatMap((c) => [el('span', { class: 'l', text: shortOf(Q[k], c) }), el('span', { text: Q[k].type === 'score' ? '' : Q[k].criteria[c], style: 'grid-column: span 2; font-size:12px; color:var(--ink-2)' })])))));
 
   let stopFlag = false;
@@ -142,26 +142,26 @@
     return d;
   }
 
-  // ---------- 计分 ----------
+  // ---------- tally ----------
   const tallies = {}; // rec -> [{qk, correct}]
   function refreshTallies() {
     let all = 0, ok = 0;
     const perCat = {};
     for (const r of records) for (const t of tallies[r.id] ?? []) { all++; if (t.correct) ok++; const c = (perCat[r.cat] ??= { n: 0, ok: 0 }); c.n++; if (t.correct) c.ok++; }
-    $('#tally').innerHTML = all ? `<span>已跑 <b>${all}</b> 题次</span><span class="ok">对 <b>${ok}</b></span><span class="bad">错 <b>${all - ok}</b></span><span>准确率 <b>${Math.round(100 * ok / all)}%</b></span>` : '<span>还没跑过</span>';
+    $('#tally').innerHTML = all ? `<span>Runs <b>${all}</b></span><span class="ok">correct <b>${ok}</b></span><span class="bad">wrong <b>${all - ok}</b></span><span>accuracy <b>${Math.round(100 * ok / all)}%</b></span>` : '<span>Nothing run yet</span>';
     for (const a of document.querySelectorAll('nav a[data-cat]')) {
       const c = perCat[a.dataset.cat], n = records.filter((r) => r.cat === a.dataset.cat).length;
-      a.querySelector('.t').innerHTML = c ? `${c.ok}<span class="bad">${c.n - c.ok ? ` / ✗${c.n - c.ok}` : ''}</span> · ${n} 条` : `${n} 条`;
+      a.querySelector('.t').innerHTML = c ? `${c.ok}<span class="bad">${c.n - c.ok ? ` / ✗${c.n - c.ok}` : ''}</span> · ${n} records` : `${n} records`;
     }
     applyFilter();
   }
 
   function renderResult(host, q, expect, d, edited) {
     const box = el('div', { class: 'result' });
-    if (d.error) { box.append(el('div', { class: 'err', text: `调用失败：${d.error}` })); host.prepend(box); return; }
+    if (d.error) { box.append(el('div', { class: 'err', text: `Call failed: ${d.error}` })); host.prepend(box); return; }
     const v = el('div');
     v.append(el('div', { class: `v ${d.correct ? 'ok' : 'bad'}`, text: `${d.correct ? '✓' : '✗'} ${shortOf(q, d.mode)}` }));
-    v.append(el('div', { class: 'm', text: `置信 ${d.confidence == null ? '–' : d.confidence.toFixed(2)} · 领先 ${d.lead.toFixed(2)}${edited ? ' · 改过的 state' : ''}` }));
+    v.append(el('div', { class: 'm', text: `confidence ${d.confidence == null ? '–' : d.confidence.toFixed(2)} · lead ${d.lead.toFixed(2)}${edited ? ' · edited state' : ''}` }));
     const bars = el('div', { class: 'bars' });
     for (const k of keysOf(q)) {
       const p = d.dist[k] ?? 0, isExp = expect.includes(k);
@@ -172,27 +172,27 @@
     while (host.children.length > 6) host.lastChild.remove();
   }
 
-  // ---------- 记录卡：一份 state，三个问题 ----------
+  // ---------- record card: one state, both questions ----------
   const cards = new Map();
   function recordCard(r) {
     const card = el('div', { class: 'card', id: `rec-${r.id}` });
-    const head = el('div', { class: 'card-head' }, el('span', { class: 'id', text: r.id }), el('span', { class: 'chip' }, el('i', { class: 'dot' }), CATS[r.cat]), r.edge ? el('span', { class: 'chip edge', text: '边界' }) : null, r.note ? el('span', { class: 'note', text: r.note }) : null);
-    const runBtn = el('button', { class: 'primary', text: '测试' }), run3 = el('button', { text: '×3' });
+    const head = el('div', { class: 'card-head' }, el('span', { class: 'id', text: r.id }), el('span', { class: 'chip' }, el('i', { class: 'dot' }), CATS[r.cat]), r.edge ? el('span', { class: 'chip edge', text: 'borderline' }) : null, r.note ? el('span', { class: 'note', text: r.note }) : null);
+    const runBtn = el('button', { class: 'primary', text: 'Test' }), run3 = el('button', { text: '×3' });
     head.append(el('div', { class: 'actions' }, runBtn, run3));
     const pretty = JSON.stringify(r.state, null, 1);
     const ta = el('textarea', { rows: '22' }); ta.value = pretty;
     const errSpan = el('span', { class: 'err' });
-    const reset = el('button', { text: '还原', style: 'padding:1px 8px;font-size:12px' }); reset.hidden = true;
+    const reset = el('button', { text: 'Reset', style: 'padding:1px 8px;font-size:12px' }); reset.hidden = true;
     reset.addEventListener('click', () => { ta.value = pretty; ta.classList.remove('bad'); errSpan.textContent = ''; reset.hidden = true; });
     ta.addEventListener('input', () => { reset.hidden = ta.value === pretty; });
-    const st = el('div', { class: 'st' }, el('div', { class: 'lbl' }, el('span', { text: 'state · 可以改了再测' }), errSpan, reset), ta);
+    const st = el('div', { class: 'st' }, el('div', { class: 'lbl' }, el('span', { text: 'state · edit and test again' }), errSpan, reset), ta);
     const qboxes = {}, qruns = {};
     const qs = el('div', { class: 'qs' });
     for (const k of QKEYS) {
       const exp = r.expect[k];
       const sum = el('div', { class: 'summary' }); sum.hidden = true;
       const results = el('div', { class: 'results' });
-      const box = el('div', { class: 'qbox' }, el('div', { class: 'qh' }, el('span', { class: 'k', text: k }), el('span', { class: 'exp', html: `标准答案 <b>${esc(exp.map((e) => shortOf(Q[k], e)).join(' | '))}</b>` })), sum, results);
+      const box = el('div', { class: 'qbox' }, el('div', { class: 'qh' }, el('span', { class: 'k', text: k }), el('span', { class: 'exp', html: `expected <b>${esc(exp.map((e) => shortOf(Q[k], e)).join(' | '))}</b>` })), sum, results);
       qs.append(box); qboxes[k] = { box, sum, results }; qruns[k] = [];
     }
     card.append(head, el('div', { class: 'body' }, st, qs));
@@ -201,12 +201,12 @@
       if (!runs.length) { sum.hidden = true; return; }
       const counts = {}; for (const x of runs) counts[x.mode] = (counts[x.mode] ?? 0) + 1;
       const ok = runs.filter((x) => x.correct).length, conf = runs.reduce((s, x) => s + (x.confidence ?? 0), 0) / runs.length;
-      sum.innerHTML = `${runs.length} 次 · <span class="ok">对 ${ok}</span> · <span class="bad">错 ${runs.length - ok}</span> · 平均置信 ${conf.toFixed(2)} · ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([m, n]) => `<b>${esc(shortOf(Q[k], m))}</b> ${n}`).join(' / ')}`;
+      sum.innerHTML = `${runs.length} runs · <span class="ok">correct ${ok}</span> · <span class="bad">wrong ${runs.length - ok}</span> · mean confidence ${conf.toFixed(2)} · ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([m, n]) => `<b>${esc(shortOf(Q[k], m))}</b> ${n}`).join(' / ')}`;
       sum.hidden = false;
     };
     const runOnce = async () => {
       let state;
-      try { state = JSON.parse(ta.value); ta.classList.remove('bad'); errSpan.textContent = ''; } catch { ta.classList.add('bad'); errSpan.textContent = 'JSON 不合法'; return; }
+      try { state = JSON.parse(ta.value); ta.classList.remove('bad'); errSpan.textContent = ''; } catch { ta.classList.add('bad'); errSpan.textContent = 'invalid JSON'; return; }
       const edited = ta.value !== pretty;
       try {
         const d = await ask(state, Q, r.expect);
@@ -233,9 +233,9 @@
     if (!rs.length) continue;
     nav.append(el('a', { href: `#g-${cat}`, 'data-cat': cat }, el('span', { text: name }), el('span', { class: 't' })));
     const g = el('section', { class: 'group', id: `g-${cat}`, 'data-cat': cat });
-    const runCat = el('button', { text: '跑这一类' });
+    const runCat = el('button', { text: 'Run this category' });
     runCat.addEventListener('click', () => runMany(rs.map((r) => r.id), runCat));
-    g.append(el('div', { class: 'group-head' }, el('h2', { text: name }), el('span', { class: 'stat', text: `${rs.length} 条，边界 ${rs.filter((r) => r.edge).length}` }), runCat));
+    g.append(el('div', { class: 'group-head' }, el('h2', { text: name }), el('span', { class: 'stat', text: `${rs.length} records, ${rs.filter((r) => r.edge).length} borderline` }), runCat));
     for (const r of rs) g.append(recordCard(r));
     groups.append(g);
   }
@@ -268,7 +268,7 @@
   $('#onlyEdge').addEventListener('change', applyFilter);
 
   refreshTallies();
-  try { const d = await ask({ ping: 1 }, { q: { type: 'choice', instructions: '这是连通性测试，随便选。', criteria: { a: 'a', b: 'b' } } }, {}); $('#model').textContent = `${d.model} · ${d.ms} ms`; } catch (e) { $('#model').textContent = `连不上 Jev：${e.message}`; }
+  try { const d = await ask({ ping: 1 }, { q: { type: 'choice', instructions: 'Connectivity check; pick either.', criteria: { a: 'a', b: 'b' } } }, {}); $('#model').textContent = `${d.model} · ${d.ms} ms`; } catch (e) { $('#model').textContent = `Can't reach Jev: ${e.message}`; }
 })();
 </script>
 </body>

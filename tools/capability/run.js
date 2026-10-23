@@ -1,17 +1,18 @@
-// 把题库全部跑一遍。改自作者早先的 Jev 能力探针（不在本仓库）：call/read 原样，
-// 区别是同一条记录的三问（junk / kind / keep）合并成一次调用（同一请求内的问题互不干扰，JEV-GUIDE 第四节），
-// 71 条记录 × 3 次 = 213 次调用。原始返回落在 .raw.json，整理后的结果在 results.json，报告由 report.js 生成。
+// Run the whole bank against Jev. Both questions of a record (junk / kind) go in one call —
+// questions in the same request don't interfere with each other. Raw responses go to .raw.json,
+// parsed results to results.json; report.js builds RESULTS.md from them.
 //
-//   node tools/capability/run.js                 # 全部记录 × 3 次
+//   node tools/capability/run.js                 # all records × 3 runs
 //   REPS=1 ONLY=chat,receipt node tools/capability/run.js
-//   ONLY=chat-old-unviewed node tools/capability/run.js
-//   EDGE=1 node tools/capability/run.js          # 只跑边界案例
+//   ONLY=chat-old-400d node tools/capability/run.js
+//   EDGE=1 node tools/capability/run.js          # borderline cases only
+//   PROFILE=aggressive node tools/capability/run.js
 const fs = require('node:fs');
 const path = require('node:path');
 const { CATS, QKEYS, PROFILES, records, items } = require('./items');
 
-// Key 只从环境变量或项目根目录的 .env 读，而且等到真要调 Jev 时才读：
-// report.js / ablate.js 等离线脚本会 require 这个文件，没有 key 也必须能跑。
+// The key comes from the environment or the project's .env, and is read only when Jev is actually called:
+// offline scripts such as report.js and ablate.js require this file and must work without a key.
 const ROOT = path.join(__dirname, '..', '..');
 let apiKey = null;
 function getApiKey() {
@@ -32,15 +33,15 @@ const REPS = Number(process.env.REPS ?? 3);
 const CONC = Number(process.env.CONC ?? 4);
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const EDGE = process.env.EDGE === '1';
-const PROFILE = process.env.PROFILE ?? null;   // PROFILE=aggressive 换一套 junk 判断标准（items.js 的 PROFILES）
+const PROFILE = process.env.PROFILE ?? null;   // PROFILE=aggressive swaps in a different set of junk criteria (PROFILES in items.js)
 if (PROFILE && !PROFILES[PROFILE]) throw new Error(`Unknown PROFILE "${PROFILE}". Available: ${Object.keys(PROFILES).join(', ')}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// 一次请求带多个问题；返回 { model, answers: {key: answer}, ms }
+// Several questions in one request; returns { model, answers: {key: answer}, ms }
 async function callMany(state, questions) {
   const body = JSON.stringify({ model: '~typesafe/jev-latest', state, questions });
-  const key = getApiKey(); // 配置问题不重试，直接报
+  const key = getApiKey(); // a configuration problem is not retried
   let lastErr;
   for (let attempt = 0; attempt < 5; attempt++) {
     const t0 = Date.now();
@@ -51,25 +52,30 @@ async function callMany(state, questions) {
         body,
       });
       const text = await res.text();
+      if ([401, 402, 403].includes(res.status)) {
+        // A bad, expired or unfunded key will not fix itself: stop instead of retrying every call.
+        throw Object.assign(new Error(`OpenRouter rejected the API key (${res.status}): ${text.slice(0, 160)}`), { fatal: true });
+      }
       if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 200)}`);
       const d = JSON.parse(text);
       for (const k of Object.keys(questions)) if (!d.answers || !d.answers[k]) throw new Error(`response has no answers.${k}: ${text.slice(0, 200)}`);
       return { model: d.model, answers: d.answers, ms: Date.now() - t0 };
     } catch (e) {
+      if (e.fatal) throw e;
       lastErr = e;
       await sleep(800 * (attempt + 1));
     }
   }
   throw lastErr;
 }
-// 单问版本，playground 用
+// single-question version, used by the playground
 async function call(state, question) {
   const r = await callMany(state, { q: question });
   return { model: r.model, answer: r.answers.q, ms: r.ms };
 }
 
-// 众数、置信度、标准答案上的概率质量。score 题的 probabilities 键是 "0".."n"，
-// choice 题的键是 choice key。统一成 { dist: {key: p}, mode, top, expectMass }。
+// Mode, confidence, and probability mass on the expected answer. Score questions key probabilities "0".."n",
+// choice questions by choice key. Normalized to { dist: {key: p}, mode, top, expectMass }.
 function read(item, answer) {
   const probs = answer.probabilities ?? {};
   const keys = item.q.type === 'score' ? item.q.criteria.map((_, i) => String(i)) : Object.keys(item.q.criteria);
@@ -91,16 +97,16 @@ function read(item, answer) {
   };
 }
 
-// 跑一批记录。opts: { todo, reps, conc, tag, transformState?, transformQ?, quiet? }
-// transformState / transformQ 给消融实验用：同一题库只改一件事（ablate.js）。
+// Run a batch of records. opts: { todo, reps, conc, tag, transformState?, transformQ?, quiet? }
+// transformState / transformQ are for ablations: change exactly one thing on the same bank (ablate.js).
 async function runBank(opts) {
   const { todo, reps = REPS, conc = CONC, tag = '', transformState = (s) => s, transformQ = (q) => q, quiet = false } = opts;
   const log = quiet ? () => {} : console.log;
-  getApiKey(); // 先确认有 key：否则每条都报错，还会用错误行覆盖 results*.json
+  getApiKey(); // check the key first: otherwise every call fails and results*.json gets overwritten with error rows
   const itemsOf = Object.fromEntries(todo.map((r) => [r.id, items.filter((it) => it.rec === r.id).map((it) => ({ ...it, state: transformState(it.state, it), q: transformQ(it.q) }))]));
   const jobs = [];
   for (const r of todo) for (let rep = 0; rep < reps; rep++) jobs.push({ r, rep });
-  // 交错：同一条记录的各次重复不相邻，避免短时状态相关
+  // interleave: repeats of the same record are not adjacent, to avoid short-term correlation
   jobs.sort((a, b) => a.rep - b.rep || 0);
 
   log(`${todo.length} records × ${reps} runs = ${jobs.length} calls (${QKEYS.length} questions each), concurrency ${conc}`);
@@ -120,6 +126,7 @@ async function runBank(opts) {
         raw.push({ rec: r.id, rep, model: res.model, answers: res.answers, ms: res.ms });
         for (const it of its) (runs[it.id] ??= [])[rep] = { ...read(it, res.answers[it.qkey]), ms: res.ms };
       } catch (e) {
+        if (e.fatal) throw e; // abort the whole batch before anything is written
         raw.push({ rec: r.id, rep, error: String(e.message) });
         for (const it of its) (runs[it.id] ??= [])[rep] = { error: String(e.message) };
         console.log(`  ✗ ${r.id} #${rep}: ${e.message}`);
@@ -147,7 +154,7 @@ async function main() {
   const tag = [PROFILE && `profile-${PROFILE}`, EDGE && 'edge', ONLY && ONLY.join('+')].filter(Boolean).map((t) => `-${t.replace(/[^\w+-]/g, '')}`).join('');
   const { model, results } = await runBank({ todo, tag, transformQ: PROFILE ? (q) => PROFILES[PROFILE].questions[q.type === 'score' ? 'junk' : 'kind'] : (q) => q });
 
-  // 终端摘要：按问题 × 类别
+  // terminal summary: per question × category
   console.log(`\nmodel ${model}`);
   for (const qk of QKEYS) {
     console.log(`\n[${qk}]`);

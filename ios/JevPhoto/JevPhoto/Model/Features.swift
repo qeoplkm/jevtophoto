@@ -1,17 +1,17 @@
-// 一张照片的结构化特征。形状、字段名、顺序和 tools/capability/items.js 的 SHAPE 完全一致。
+// The structured features of one photo. Shape, field names and order match SHAPE in tools/capability/items.js exactly.
 import Foundation
 import Photos
 import Vision
 
 struct FeatureState {
-    // asset（PHAsset）
+    // asset (PHAsset)
     var mediaType = "image", mediaSubtypes: [String] = [], playbackStyle = "image"
     var pixelWidth = 0, pixelHeight = 0, duration = 0.0
     var hasLocation = false, isFavorite = false, isHidden = false, hasAdjustments = false, adjustmentsState = "none"
     var sourceType = "typeUserLibrary", burstIdentifier: String? = nil, representsBurst = false, burstSelectionTypes: [String] = []
-    // resource（PHAssetResource）
+    // resource (PHAssetResource)
     var contentType: String? = nil, dataSize: Int? = nil
-    // imageProperties（ImageIO {TIFF} / {Exif}）
+    // imageProperties (ImageIO {TIFF} / {Exif})
     var make: String? = nil, model: String? = nil, lensModel: String? = nil, iso: Int? = nil, exposureTime: Double? = nil, fNumber: Double? = nil
     // vision
     var faceCount = 0, textCharCount = 0, barcodeCount = 0, aestheticScore: Double? = nil, isUtility: Bool? = nil, sceneLabels: [(String, Double)] = []
@@ -47,43 +47,43 @@ struct FeatureState {
         ])
     }
 
-    // 审核页上的一行摘要
+    // one-line summary for the review screens
     var summary: String {
         var bits: [String] = []
         if mediaType == "video" { bits.append("video \(Int(duration))s") }
         bits.append(contentsOf: mediaSubtypes)
         bits.append("\(pixelWidth)×\(pixelHeight)")
-        bits.append(model ?? "无 EXIF")
-        if sourceType == "typeCloudShared" { bits.append("共享相簿") }
-        bits.append("脸 \(faceCount)"); bits.append("字 \(textCharCount)")
-        if barcodeCount > 0 { bits.append("码 \(barcodeCount)") }
+        bits.append(model ?? "no EXIF")
+        if sourceType == "typeCloudShared" { bits.append("shared album") }
+        bits.append("faces \(faceCount)"); bits.append("chars \(textCharCount)")
+        if barcodeCount > 0 { bits.append("barcodes \(barcodeCount)") }
         if ocrDocType != "none" { bits.append(ocrDocType) }
         if isUtility == true { bits.append("utility") }
         if !sceneLabels.isEmpty { bits.append(sceneLabels.prefix(3).map { $0.0 }.joined(separator: "/")) }
-        bits.append("美 \(aestheticScore.map { String(format: "%.2f", $0) } ?? "–")")
-        bits.append("清 \(sharpness.map { String(format: "%.2f", $0) } ?? "–")")
-        bits.append("亮 \(meanLuminance.map { String(format: "%.2f", $0) } ?? "–")")
+        bits.append("aesth \(aestheticScore.map { String(format: "%.2f", $0) } ?? "–")")
+        bits.append("sharp \(sharpness.map { String(format: "%.2f", $0) } ?? "–")")
+        bits.append("lum \(meanLuminance.map { String(format: "%.2f", $0) } ?? "–")")
         bits.append("\(daysSinceCreation)d")
-        if exactDuplicateCount > 0 { bits.append("副本 \(exactDuplicateCount)") }
-        if nearDuplicateCount > 0 { bits.append("近重复 \(nearDuplicateCount)") }
-        if isSharpestInBurst == false { bits.append("非最清晰") } else if isSharpestInBurst == true { bits.append("最清晰") }
-        if burstIdentifier != nil { bits.append("连拍" + (burstSelectionTypes.isEmpty ? "" : " " + burstSelectionTypes.joined(separator: "+"))) }
+        if exactDuplicateCount > 0 { bits.append("copies \(exactDuplicateCount)") }
+        if nearDuplicateCount > 0 { bits.append("near-dups \(nearDuplicateCount)") }
+        if isSharpestInBurst == false { bits.append("not sharpest") } else if isSharpestInBurst == true { bits.append("sharpest") }
+        if burstIdentifier != nil { bits.append("burst" + (burstSelectionTypes.isEmpty ? "" : " " + burstSelectionTypes.joined(separator: "+"))) }
         if isFavorite { bits.append("★") }
         if adjustmentsState != "none" { bits.append(adjustmentsState) }
         return bits.joined(separator: " · ")
     }
 }
 
-// Jev 对一个问题的一次读数
+// One reading of one question from Jev
 struct JevAnswer {
-    var probabilities: [(String, Double)]   // 按 criteria 顺序
+    var probabilities: [(String, Double)]   // in criteria order
     var confidence: Double
     var mode: String { probabilities.max { $0.1 < $1.1 }?.0 ?? "" }
     var top: Double { probabilities.max { $0.1 < $1.1 }?.1 ?? 0 }
 }
 
 enum Column: String { case delete, unsure, keep
-    var title: String { switch self { case .delete: return "建议删除"; case .unsure: return "拿不准"; case .keep: return "保留" } }
+    var title: String { switch self { case .delete: return "Suggest delete"; case .unsure: return "Not sure"; case .keep: return "Keep" } }
 }
 
 struct Decision {
@@ -97,13 +97,13 @@ struct PhotoRecord: Identifiable {
     let asset: PHAsset
     var state: FeatureState
     var creationDate: Date?, addedDate: Date?
-    var notes: [String] = []    // 抽特征时的备注（原图在 iCloud、Vision 失败…）
+    var notes: [String] = []    // notes from feature extraction (original in iCloud, Vision failed, …)
     var sha: String? = nil
     var featurePrint: VNFeaturePrintObservation? = nil
     var rule: RuleResult = RuleResult(verdict: nil, reason: nil)
     var junk: JevAnswer? = nil, kind: JevAnswer? = nil
-    var decision = Decision(column: .unsure, by: "none", reason: "还没判")
-    var local = Decision(column: .unsure, by: "local", reason: "还没判")   // 全本地阈值版（对照）
+    var decision = Decision(column: .unsure, by: "none", reason: "not judged yet")
+    var local = Decision(column: .unsure, by: "local", reason: "not judged yet")   // fully local threshold version (for comparison)
     var jevMs: Int? = nil, bytesSent: Int? = nil
     var stateJSON: String { state.toJ().encode(pretty: true) }
 }

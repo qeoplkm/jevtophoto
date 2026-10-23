@@ -1,6 +1,6 @@
-// 题库的交互台：列出记录，点「测试」现场调 Jev，可以改 state 再测。改自作者早先的 Jev 能力探针（不在本仓库）。
+// Interactive playground for the bank: list records, press "Test" to call Jev live, edit the state and test again.
 //   node tools/capability/serve.js      # http://localhost:8790
-// key 只留在这里，页面走 /api/ask 代理。/api/ask 一次可以带多个问题（同一条记录的三问）。
+// The key stays on the server; the page goes through the /api/ask proxy, which accepts several questions at once.
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -33,9 +33,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url === '/api/ask') {
       const body = JSON.parse(await readBody(req));
-      // 单问：{ state, question, expect: [] }；多问：{ state, questions: {k: q}, expect: {k: []} }
+      // single: { state, question, expect: [] }; multiple: { state, questions: {k: q}, expect: {k: []} }
       const questions = body.questions ?? (body.question ? { q: body.question } : null);
-      if (!questions || Object.values(questions).some((q) => !q || !q.type)) return json(res, 400, { error: 'question(s) 缺 type' });
+      if (!questions || Object.values(questions).some((q) => !q || !q.type)) return json(res, 400, { error: 'question(s) missing type' });
       const r = await callMany(body.state ?? {}, questions);
       const expectOf = (k) => [].concat((body.questions ? body.expect?.[k] : body.expect) ?? []).map(String);
       const answers = Object.fromEntries(Object.entries(questions).map(([k, q]) => [k, { answer: r.answers[k], ...read({ q, expect: expectOf(k) }, r.answers[k]) }]));
@@ -48,5 +48,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  jevtophoto 题库交互台  ->  http://localhost:${PORT}\n  ${records.length} 条记录 × ${QKEYS.length} 问\n`);
+  console.log(`\n  jevtophoto playground  ->  http://localhost:${PORT}\n  ${records.length} records × ${QKEYS.length} questions\n`);
 });

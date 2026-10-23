@@ -1,4 +1,4 @@
-// 有序 JSON：state 的字段顺序是 prompt 的一部分（JEV-GUIDE 第三节），Dictionary 不保序，所以自己编码。
+// Ordered JSON: the state's key order is part of the prompt, and Dictionary does not preserve order, so encode by hand.
 import Foundation
 
 indirect enum J {
