@@ -1,7 +1,7 @@
 # xcodegen generate  →  JevPhoto.xcodeproj (the project file is not committed; regenerate it any time)
 name: JevPhoto
 options:
-  bundleIdPrefix: com.yaoshuai
+  bundleIdPrefix: com.example   # placeholder: change to your own reverse-DNS prefix
   deploymentTarget:
     iOS: "18.0"
   createIntermediateGroups: true
@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}   # from the environment: DEVELOPMENT_TEAM=<your team ID> xcodegen generate
-    CODE_SIGN_STYLE: Automatic   # also change bundleIdPrefix above to your own
+    CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
 targets:
@@ -28,5 +28,5 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yaoshuai.jevphoto
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.jevphoto   # placeholder: change to your own
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
