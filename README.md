@@ -141,7 +141,7 @@ Build a rules-only baseline (screenshot > 90 days and no faces → delete; non-s
 
 - Node 20+ (no dependencies) for `tools/`; Xcode + [XcodeGen](https://github.com/yonaskolb/XcodeGen) for `ios/`.
 - Copy `.env.example` to `.env` and put your own OpenRouter key in it (or export `OPENROUTER_API_KEY`). The key is read only when a script actually calls Jev. `.env`, `ios/…/Secrets.plist`, `out/` (your photos' thumbnails and features) and the built extractor are all git-ignored.
-- `ios/JevPhoto/project.yml` contains the author's bundle-ID prefix and signing team — change them to yours before building.
+- `ios/JevPhoto/project.yml` reads the signing team from `DEVELOPMENT_TEAM` in the environment; change its `bundleIdPrefix` to yours before building.
 
 ## Repository layout
 

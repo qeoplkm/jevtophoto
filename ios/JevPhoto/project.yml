@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: 54H5XL9Q5A
-    CODE_SIGN_STYLE: Automatic   # set DEVELOPMENT_TEAM above and bundleIdPrefix to your own
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}   # from the environment: DEVELOPMENT_TEAM=<your team ID> xcodegen generate
+    CODE_SIGN_STYLE: Automatic   # also change bundleIdPrefix above to your own
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
 targets:

@@ -8,7 +8,7 @@ Question text and key order are generated from `tools/capability/items.js` (`nod
 
 ## Installing on a phone
 
-1. Generate the Xcode project (it is git-ignored): `cd ios/JevPhoto && xcodegen generate`. Set your own `bundleIdPrefix` and development team in `project.yml` first.
+1. Generate the Xcode project (it is git-ignored): `cd ios/JevPhoto && DEVELOPMENT_TEAM=<your team ID> xcodegen generate`. The team ID comes from the environment and is not stored in the repo; without it, pick a team under Signing & Capabilities in Xcode. Change `bundleIdPrefix` in `project.yml` to your own first.
 2. API key: `./ios/gen-secrets.sh` writes `Secrets.plist` from the project's `.env` (git-ignored). Or skip it and paste the key into the app's Settings after installing.
 3. `open ios/JevPhoto/JevPhoto.xcodeproj`, pick your iPhone as the destination, ⌘R.
    - Enable Developer Mode on the iPhone first: Settings › Privacy & Security › Developer Mode, then restart.
