@@ -9,6 +9,7 @@
     "report": "node tools/capability/report.js",
     "play": "node tools/capability/serve.js",
     "rules": "node tools/capability/rules.js",
+    "test": "node --test tools/capability/decision.test.js",
     "ablate": "node tools/capability/ablate.js",
     "extract:build": "swiftc -O -o tools/extract/extract tools/extract/extract.swift",
     "extract": "tools/extract/extract --folder ~/Downloads --out out/downloads",
