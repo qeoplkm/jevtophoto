@@ -7,7 +7,8 @@ const ROOT = path.join(__dirname, '..', '..', 'out');
 const PORT = Number(process.env.PORT ?? 8791);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8', '.jpg': 'image/jpeg', '.png': 'image/png', '.css': 'text/css', '.js': 'text/javascript' };
 http.createServer((req, res) => {
-  const p = path.normalize(decodeURIComponent(req.url.split('?')[0]));
+  let p;
+  try { p = path.normalize(decodeURIComponent(req.url.split('?')[0])); } catch { res.writeHead(400); return res.end('bad request'); }
   const file = path.join(ROOT, p);
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   let target = file;
