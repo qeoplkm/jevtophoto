@@ -214,10 +214,36 @@ enum Extractor {
     }
 
     // ---------- whole batch: exact duplicates, near duplicates, sharpest in burst ----------
+    // Same rule as exactDuplicateCounts in tools/extract/duplicates.js: rules.js deletes every image with
+    // exactDuplicateCount > 0, so one copy is reported as 0 unless a favorite / user edit / user pick already saves one.
+    static func exactDuplicateCounts(_ items: [(sha: String?, sharpness: Double?, isFavorite: Bool, adjustmentsState: String, burstSelectionTypes: [String])]) -> [Int] {
+        var groups: [String: [Int]] = [:]
+        for (i, it) in items.enumerated() {
+            guard let sha = it.sha, !sha.isEmpty else { continue }
+            groups[sha, default: []].append(i)
+        }
+        var counts = Array(repeating: 0, count: items.count)
+        for idxs in groups.values where idxs.count > 1 {
+            let kept = idxs.contains(where: { i in
+                let it = items[i]
+                return it.isFavorite || it.adjustmentsState == "userAdjusted" || it.burstSelectionTypes.contains("userPick")
+            })
+            var spare = -1
+            if !kept {
+                spare = idxs[0]
+                for i in idxs {
+                    let s = items[i].sharpness ?? -Double.infinity
+                    let b = items[spare].sharpness ?? -Double.infinity
+                    if s > b { spare = i }
+                }
+            }
+            for i in idxs { counts[i] = i == spare ? 0 : idxs.count - 1 }
+        }
+        return counts
+    }
     static func finalize(_ recs: inout [PhotoRecord]) {
-        var shaCount: [String: Int] = [:]
-        for r in recs { if let h = r.sha { shaCount[h, default: 0] += 1 } }
-        for i in recs.indices { if let h = recs[i].sha { recs[i].state.exactDuplicateCount = max(0, (shaCount[h] ?? 1) - 1) } }
+        let counts = exactDuplicateCounts(recs.map { (sha: $0.sha, sharpness: $0.state.sharpness, isFavorite: $0.state.isFavorite, adjustmentsState: $0.state.adjustmentsState, burstSelectionTypes: $0.state.burstSelectionTypes) })
+        for i in recs.indices { recs[i].state.exactDuplicateCount = counts[i] }
         var parent = Array(recs.indices)
         func find(_ x: Int) -> Int { var x = x; while parent[x] != x { parent[x] = parent[parent[x]]; x = parent[x] }; return x }
         // bursts are grouped by burstIdentifier; everything else by feature-print distance
