@@ -229,6 +229,32 @@ func processVideo(_ url: URL, _ r: inout Rec) -> Bool {
     return true
 }
 
+// Same rule as exactDuplicateCounts in tools/extract/duplicates.js.
+// Folder mode never knows isFavorite / adjustments / userPick (those fields are filled in as defaults below),
+// so the sharpest copy is the one reported as 0. The flags are still part of the rule for when PhotoKit mode exists.
+func exactDuplicateCounts(_ items: [(sha: String, sharpness: Double?, isFavorite: Bool, adjustmentsState: String, burstSelectionTypes: [String])]) -> [Int] {
+    var groups: [String: [Int]] = [:]
+    for (i, it) in items.enumerated() where !it.sha.isEmpty { groups[it.sha, default: []].append(i) }
+    var counts = Array(repeating: 0, count: items.count)
+    for idxs in groups.values where idxs.count > 1 {
+        let kept = idxs.contains(where: { i in
+            let it = items[i]
+            return it.isFavorite || it.adjustmentsState == "userAdjusted" || it.burstSelectionTypes.contains("userPick")
+        })
+        var spare = -1
+        if !kept {
+            spare = idxs[0]
+            for i in idxs {
+                let s = items[i].sharpness ?? -Double.infinity
+                let b = items[spare].sharpness ?? -Double.infinity
+                if s > b { spare = i }
+            }
+        }
+        for i in idxs { counts[i] = i == spare ? 0 : idxs.count - 1 }
+    }
+    return counts
+}
+
 // ---------- main ----------
 let urls = ((try? fm.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [])
     .filter { IMAGE_EXT.contains($0.pathExtension.lowercased()) || VIDEO_EXT.contains($0.pathExtension.lowercased()) }
@@ -256,9 +282,9 @@ for url in urls {
 }
 
 // exact duplicates: file hash; near duplicates: feature-print distance; "sharpest": highest sharpness in a near-duplicate connected component
-for i in recs.indices {
-    recs[i].exactDup = recs.enumerated().filter { $0.offset != i && !$0.element.sha.isEmpty && $0.element.sha == recs[i].sha }.count
-}
+// One identical copy has to survive: see exactDuplicateCounts above.
+let dupCounts = exactDuplicateCounts(recs.map { (sha: $0.sha, sharpness: $0.sharpness, isFavorite: false, adjustmentsState: "none", burstSelectionTypes: [] as [String]) })
+for i in recs.indices { recs[i].exactDup = dupCounts[i] }
 var parent = Array(recs.indices)
 func find(_ x: Int) -> Int { var x = x; while parent[x] != x { parent[x] = parent[parent[x]]; x = parent[x] }; return x }
 for i in recs.indices {
@@ -312,7 +338,8 @@ func stateOf(_ r: Rec) -> J {
 let out = J.obj([
     ("generatedAt", .s(iso8601.string(from: NOW))), ("mode", .s("folder")), ("source", .s(folder)),
     ("notes", .arr([.s("Folder mode: isFavorite / isHidden / hasAdjustments / burst* / sourceType are unavailable and filled with defaults; mediaSubtypes only recognises iOS screenshots (EXIF UserComment) and GIFs"),
-                    .s("sharpness = log scale of Laplacian variance, meanLuminance = 512 px grayscale mean, nearDuplicate = VNFeaturePrint distance < \(NEAR_DUP_DISTANCE); all thresholds are guesses")])),
+                    .s("sharpness = log scale of Laplacian variance, meanLuminance = 512 px grayscale mean, nearDuplicate = VNFeaturePrint distance < \(NEAR_DUP_DISTANCE); all thresholds are guesses"),
+                    .s("exactDuplicateCount is the number of other identical files, except the sharpest copy of a group is left at 0 so the delete rule keeps one")])),
     ("records", .arr(recs.map { r in
         .obj([("id", .s(r.id)), ("file", .s(r.file)), ("thumbnail", J.str(r.thumb)),
               ("dates", .obj([("creationDate", .s(iso8601.string(from: r.creationDate))), ("addedDate", .s(iso8601.string(from: r.addedDate)))])),
