@@ -25,11 +25,31 @@ func decide(_ s: FeatureState, rule: RuleResult, junk: JevAnswer?, tau: Double =
     if rule.verdict == "keep" || rule.verdict == "skip" { return Decision(column: .keep, by: "rule", reason: rule.reason ?? "") }
     guard let j = junk else { return Decision(column: .unsure, by: "none", reason: "no model reading") }
     let mode = j.mode, conf = j.confidence
-    if mode == "2" || conf < tau {
-        return Decision(column: .unsure, by: "jev", reason: mode == "2" ? "model is not sure" : String(format: "confidence %.2f below %.1f", conf, tau))
+    let tied = tiedAcrossColumns(j)
+    let known = mode == "0" || mode == "1" || mode == "3"
+    if tied || !known || conf < tau {
+        let reason: String
+        if tied { reason = "top probability is tied" }
+        else if mode == "2" { reason = "model is not sure" }
+        else if !known { reason = "no unique level" }
+        else { reason = String(format: "confidence %.2f below %.1f", conf, tau) }
+        return Decision(column: .unsure, by: "jev", reason: reason)
     }
     let level = Int(mode) ?? 0
     return Decision(column: mode == "3" ? .keep : .delete, by: "jev", reason: String(format: "%@, confidence %.2f", JUNK_LEVELS[min(level, JUNK_LEVELS.count - 1)], conf))
+}
+
+// True when the highest junk probability is shared by levels that are not all the same column
+// (delete = 0 or 1, not sure = 2, keep = 3). Same rule as tiedAcrossColumns in tools/capability/rules.js.
+private func tiedAcrossColumns(_ j: JevAnswer) -> Bool {
+    let levels = ["0", "1", "2", "3"]
+    let dist = Dictionary(j.probabilities, uniquingKeysWith: { first, _ in first })
+    let present = levels.compactMap { k -> (String, Double)? in dist[k].map { (k, $0) } }
+    guard let best = present.map(\.1).max() else { return false }
+    let tied = present.filter { $0.1 == best }.map(\.0)
+    if tied.count < 2 { return false }
+    func column(_ k: String) -> String { k == "3" ? "keep" : k == "2" ? "unsure" : "delete" }
+    return Set(tied.map(column)).count > 1
 }
 
 // Fully local comparison: the aggressive policy as threshold rules, no Jev calls at all (same as tools/extract/local-baseline.js)
