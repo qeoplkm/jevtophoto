@@ -32,7 +32,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { cats: CATS, questions: QUESTIONS, qkeys: QKEYS, records });
     }
     if (req.method === 'POST' && url === '/api/ask') {
-      const body = JSON.parse(await readBody(req));
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { body = null; }
+      if (!body || typeof body !== 'object') return json(res, 400, { error: 'body must be a JSON object' });
       // single: { state, question, expect: [] }; multiple: { state, questions: {k: q}, expect: {k: []} }
       const questions = body.questions ?? (body.question ? { q: body.question } : null);
       if (!questions || Object.values(questions).some((q) => !q || !q.type)) return json(res, 400, { error: 'question(s) missing type' });
