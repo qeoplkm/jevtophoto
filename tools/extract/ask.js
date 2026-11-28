@@ -7,7 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { QUESTIONS, QKEYS } = require('../capability/items');
-const { applyRules, decide, DEFAULT_TAU } = require('../capability/rules');
+const { applyRules, decide, DEFAULT_TAU, RECENT_SCREENSHOT_DAYS } = require('../capability/rules');
 
 const outDir = process.argv[2];
 const SEND = process.argv.includes('--send');
@@ -71,7 +71,7 @@ async function main() {
   const cols = { delete: decisions.filter((x) => x.decision.column === 'delete'), unsure: decisions.filter((x) => x.decision.column === 'unsure'), keep: decisions.filter((x) => x.decision.column === 'keep') };
   console.log(`\nSuggest delete ${cols.delete.length} · Not sure ${cols.unsure.length} · Keep ${cols.keep.length}`);
   for (const [col, list] of Object.entries(cols)) for (const x of list) console.log(`  ${({ delete: 'DEL', unsure: '???', keep: 'KEEP' })[col].padEnd(4)} ${x.id.slice(0, 34).padEnd(34)} ${x.decision.by === 'rule' ? 'rule' : x.decision.by === 'jev' ? 'Jev ' : '    '} ${x.decision.reason}${x.kind ? `  · kind ${x.kind.mode} ${x.kind.confidence.toFixed(2)}` : ''}`);
-  const out = { generatedAt: new Date().toISOString(), source: F.source, mode: F.mode, sent: SEND, tau: TAU, reps: REPS, model: SEND ? '~typesafe/jev-latest' : null, decisions };
+  const out = { generatedAt: new Date().toISOString(), source: F.source, mode: F.mode, sent: SEND, tau: TAU, reps: REPS, recentScreenshotDays: RECENT_SCREENSHOT_DAYS, model: SEND ? '~typesafe/jev-latest' : null, decisions };
   fs.writeFileSync(path.join(outDir, 'decisions.json'), JSON.stringify(out, null, 1));
 
   // ---------- 4. review.html ----------
@@ -111,7 +111,7 @@ details{margin-top:4px}summary{cursor:pointer;color:var(--muted);font-size:11.5p
 <div class="cols">
 ${['delete', 'unsure', 'keep'].map((c) => `<div class="col ${c}"><h2>${({ delete: 'Suggest delete', unsure: 'Not sure', keep: 'Keep' })[c]} <span>${cols[c].length}</span></h2>${cols[c].map(card).join('')}</div>`).join('')}
 </div>
-<p class="foot">This page deletes nothing. No pixels, file names or OCR text were sent; the exact JSON sent is in to-send.json. Rules: hidden, shared-album and screenshots from the last 14 days are not candidates; favorited, user-edited and user-picked burst frames are kept; identical copies and non-sharpest burst frames are suggested for deletion; everything else follows the majority of Jev's junk question, and "not sure" or confidence &lt; ${TAU} goes to "Not sure".</p>
+<p class="foot">This page deletes nothing. No pixels, file names or OCR text were sent; the exact JSON sent is in to-send.json. Rules: hidden, shared-album and screenshots from the last ${RECENT_SCREENSHOT_DAYS} days are not candidates; favorited, user-edited and user-picked burst frames are kept; identical copies and non-sharpest burst frames are suggested for deletion; everything else follows the majority of Jev's junk question, and "not sure" or confidence &lt; ${TAU} goes to "Not sure".</p>
 </div></body></html>`;
   fs.writeFileSync(path.join(outDir, 'review.html'), html);
   console.log(`\nWrote ${path.join(outDir, 'decisions.json')} and ${path.join(outDir, 'review.html')}`);
